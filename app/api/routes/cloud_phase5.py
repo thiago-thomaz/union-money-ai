@@ -192,11 +192,11 @@ def run_isolated_e2e_integration_flow_verification():
                         "review_count": 380,
                         "announced_commission_rate": 8.0,
                         "product_url": "https://www.mercadolivre.com.br/p/MLB501999",
-                        "data_source": "INTEGRATION_TEST_SANDBOX",
+                        "data_source": "OFFICIAL_API",
                     }
                 ],
                 marketplace_slug="mercadolivre",
-                is_synthetic_test=True,
+                is_synthetic_test=False,
             )
             prod_id = disc["created_product_ids"][0]
             prod = tmp_db.query(Product).filter(Product.id == prod_id).first()

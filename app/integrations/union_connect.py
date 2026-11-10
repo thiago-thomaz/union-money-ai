@@ -935,6 +935,52 @@ class UnionConnect:
             },
         ]
 
+        owner_vs_platform_matrix = {
+            "mercadolivre": {
+                "depends_on_owner_authorization": [
+                    "Criar/acessar aplicativo no Mercado Livre DevCenter (https://developers.mercadolivre.com.br)",
+                    "Informar ML_AFFILIATE_TAG, ML_CLIENT_ID e ML_CLIENT_SECRET em /integrations",
+                    "Clicar uma única vez em 'Autorizar OAuth 2.0' para conceder offline_access",
+                ],
+                "depends_on_platform_approval": [
+                    "Conta elegível no Programa de Afiliados do Mercado Livre Brasil para comissionamento de links matt_tool / /sec/",
+                ],
+                "automated_by_system_24_7": [
+                    "Renovação perpétua de ML_ACCESS_TOKEN e ML_REFRESH_TOKEN",
+                    "Descoberta de produtos, atualização de preços/estoque, geração de links matt_tool e sincronização de pedidos",
+                ],
+            },
+            "amazon": {
+                "depends_on_owner_authorization": [
+                    "Cadastrar conta no Associados Amazon Brasil (https://associados.amazon.com.br)",
+                    "Informar AMAZON_PARTNER_TAG (ex: seutag-20) em /integrations para ativar imediatamente links oficiais /dp/{ASIN}?tag=",
+                    "Após elegibilidade PA-API 5.0, informar AMAZON_ACCESS_KEY e AMAZON_SECRET_KEY em /integrations",
+                ],
+                "depends_on_platform_approval": [
+                    "Aprovação contratual da Amazon Brasil exigindo 3 vendas qualificadas nos primeiros 180 dias para liberar acesso à PA-API 5.0",
+                    "Ausência de API REST pública da Amazon para relatórios de comissões (suportado via leitor de e-mail OAuth ou CSV oficial)",
+                ],
+                "automated_by_system_24_7": [
+                    "Geração de links canônicos /dp/{ASIN}?tag={AMAZON_PARTNER_TAG} + shortlinks /r/{code}",
+                    "Busca e atualização via PA-API 5.0 com assinatura AWS4-HMAC-SHA256 assim que chaves estiverem ativas",
+                ],
+            },
+            "shopee": {
+                "depends_on_owner_authorization": [
+                    "Informar SHOPEE_AFFILIATE_ID em /integrations para geração imediata de links parametrizados",
+                    "Informar SHOPEE_APP_ID e SHOPEE_APP_SECRET em /integrations após liberação da Open API",
+                ],
+                "depends_on_platform_approval": [
+                    "Aprovação da conta no Programa de Afiliados Shopee Brasil (https://affiliate.shopee.com.br)",
+                    "Aprovação da solicitação de acesso à Shopee Affiliate Open API (GraphQL) pela equipe da Shopee",
+                ],
+                "automated_by_system_24_7": [
+                    "Assinatura SHA256(AppId + Timestamp + Payload + Secret) em cada chamada GraphQL",
+                    "Descoberta via productOfferV2, encurtador oficial generateShortLink e conciliação de comissões via conversionReport",
+                ],
+            },
+        }
+
         return {
             "allowed_states": [
                 "REALMENTE CONECTADO",
@@ -944,6 +990,7 @@ class UnionConnect:
             ],
             "marketplaces": marketplace_audits,
             "channels_and_analytics": channel_and_analytics_audits,
+            "owner_vs_platform_matrix": owner_vs_platform_matrix,
             "summary_counts": {
                 "realmente_conectado": sum(
                     1 for x in (marketplace_audits + channel_and_analytics_audits) if x["overall_state"] == "REALMENTE CONECTADO"

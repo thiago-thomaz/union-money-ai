@@ -3,7 +3,11 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.config import settings
+from app.finance.commissions import record_commission, update_commission_status
 from app.models.audit import AuditLog
+from app.models.conversion import Conversion
+from app.models.marketplace import Category, Marketplace
+from app.models.product import Product
 
 
 def test_phase5_platform_audit_panel_four_states_and_runtime_credentials(
@@ -108,4 +112,150 @@ def test_phase5_separated_integration_flow_vs_real_commercial_state(client: Test
     assert after_state["real_active_products"] == before_state["real_active_products"]
     assert after_state["confirmed_real_conversions"] == before_state["confirmed_real_conversions"]
     assert after_state["cash_received_paid_commissions_brl"] == before_state["cash_received_paid_commissions_brl"]
+
+
+def test_etapa5_strict_financial_separation_blocks_synthetic_test_commission_from_cash_and_dashboard(
+    client: TestClient, db_session: Session
+):
+    """Comprova a Etapa 5: jamais permitir que conversão sintética ou comissão de teste entre como venda real ou receita recebida."""
+    # Verifica também a matriz Proprietário vs Plataforma da Etapa 3
+    audit_res = client.get("/api/integrations/phase5-audit").json()
+    matrix = audit_res["owner_vs_platform_matrix"]
+    assert "mercadolivre" in matrix and "amazon" in matrix and "shopee" in matrix
+    assert len(matrix["amazon"]["depends_on_owner_authorization"]) >= 2
+    assert len(matrix["amazon"]["depends_on_platform_approval"]) >= 1
+
+    mkt = db_session.query(Marketplace).filter(Marketplace.slug == "amazon").first()
+    cat = db_session.query(Category).first()
+    assert mkt is not None and cat is not None
+
+    # 1. Cria um produto sintético de teste e registra conversão CONFIRMED + comissão PAID nele
+    synth_prod = Product(
+        marketplace_id=mkt.id,
+        category_id=cat.id,
+        external_id="SYNTH-TEST-999",
+        title="[TESTE SINTÉTICO] Produto Sandbox Auditoria",
+        product_url="https://www.amazon.com.br/dp/B08N5WRWNW",
+        affiliate_url="https://www.amazon.com.br/dp/B08N5WRWNW?tag=test-20",
+        price=1999.0,
+        announced_commission_rate=10.0,
+        estimated_commission_value=199.9,
+        in_stock=True,
+        is_active=True,
+        is_synthetic_test=True,
+    )
+    db_session.add(synth_prod)
+    db_session.commit()
+    db_session.refresh(synth_prod)
+
+    synth_conv = Conversion(
+        product_id=synth_prod.id,
+        marketplace_id=mkt.id,
+        source="SYNTHETIC_TEST_SANDBOX",
+        channel="TEST_RUNNER",
+        status="CONFIRMED",
+        order_value=1999.0,
+        quantity=1,
+        external_reference="SYNTH-ORDER-001",
+    )
+    db_session.add(synth_conv)
+    db_session.commit()
+    db_session.refresh(synth_conv)
+
+    record_commission(
+        db=db_session,
+        product_id=synth_prod.id,
+        marketplace_id=mkt.id,
+        source="SYNTHETIC_TEST_SANDBOX",
+        amount=999.90,
+        status="PAID",
+        conversion_id=synth_conv.id,
+        external_reference="SYNTH-COMM-001",
+    )
+
+    # 2. Consulta painel financeiro e dashboard: comissão sintética de R$ 999,90 JAMAIS entra no caixa ou receita real!
+    fin_1 = client.get("/api/finance/indicators").json()
+    dash_1 = client.get("/api/dashboard/indicators").json()
+
+    assert fin_1["cash_received_brl"] == 0.0
+    assert fin_1["paid_commissions_brl"] == 0.0
+    assert fin_1["approved_commissions_brl"] == 0.0
+    assert fin_1["strict_financial_separation"]["test_synthetic_data_brl"] == 999.90
+    assert fin_1["strict_financial_separation"]["test_synthetic_conversions_count"] == 1
+    assert fin_1["strict_financial_separation"]["test_synthetic_included_in_revenue"] is False
+
+    assert dash_1["confirmed_revenue_brl"] == 0.0
+    assert dash_1["confirmed_conversions"] == 0
+    assert dash_1["approved_commissions_brl"] == 0.0
+
+    # 3. Agora cria produto REAL e testa a progressão: PENDING -> APPROVED -> PAID
+    real_prod = Product(
+        marketplace_id=mkt.id,
+        category_id=cat.id,
+        external_id="B09V3KXJPB",
+        title="Echo Show 5 (3ª Geração) Real",
+        product_url="https://www.amazon.com.br/dp/B09V3KXJPB",
+        affiliate_url="https://www.amazon.com.br/dp/B09V3KXJPB?tag=union-20",
+        price=600.0,
+        announced_commission_rate=9.0,
+        estimated_commission_value=54.0,
+        in_stock=True,
+        is_active=True,
+        is_synthetic_test=False,
+    )
+    db_session.add(real_prod)
+    db_session.commit()
+    db_session.refresh(real_prod)
+
+    real_conv = Conversion(
+        product_id=real_prod.id,
+        marketplace_id=mkt.id,
+        source="OFFICIAL_WEBHOOK_AMAZON",
+        channel="SITE_UNION_OFERTAS",
+        status="PENDING",
+        order_value=600.0,
+        quantity=1,
+        external_reference="REAL-ORDER-101",
+    )
+    db_session.add(real_conv)
+    db_session.commit()
+    db_session.refresh(real_conv)
+
+    real_comm = record_commission(
+        db=db_session,
+        product_id=real_prod.id,
+        marketplace_id=mkt.id,
+        source="OFFICIAL_WEBHOOK_AMAZON",
+        amount=54.0,
+        status="PENDING",
+        conversion_id=real_conv.id,
+        external_reference="REAL-COMM-101",
+    )
+
+    fin_pending = client.get("/api/finance/indicators").json()
+    assert fin_pending["pending_commissions_brl"] == 54.0
+    assert fin_pending["cash_received_brl"] == 0.0
+    assert fin_pending["strict_financial_separation"]["pending_conversions_count"] == 1
+    assert fin_pending["strict_financial_separation"]["approved_conversions_count"] == 0
+
+    # Aprova conversão e comissão (ainda não paga no caixa)
+    real_conv.status = "CONFIRMED"
+    db_session.commit()
+    update_commission_status(db_session, real_comm.id, "APPROVED", reason="Pedido confirmado pela plataforma")
+
+    fin_approved = client.get("/api/finance/indicators").json()
+    assert fin_approved["approved_only_commissions_brl"] == 54.0
+    assert fin_approved["cash_received_brl"] == 0.0
+    assert fin_approved["strict_financial_separation"]["approved_conversions_count"] == 1
+    assert fin_approved["strict_financial_separation"]["confirmed_commissions_brl"] == 54.0
+    assert fin_approved["strict_financial_separation"]["effectively_paid_brl"] == 0.0
+
+    # Liquida pagamento efetivo (PAID) -> entra no caixa recebido (R$ 54,00, sem misturar os R$ 999,90 de teste)
+    update_commission_status(db_session, real_comm.id, "PAID", reason="Repasse bancário liquidado")
+
+    fin_paid = client.get("/api/finance/indicators").json()
+    assert fin_paid["cash_received_brl"] == 54.0
+    assert fin_paid["strict_financial_separation"]["effectively_paid_brl"] == 54.0
+    assert fin_paid["strict_financial_separation"]["test_synthetic_data_brl"] == 999.90
+
 

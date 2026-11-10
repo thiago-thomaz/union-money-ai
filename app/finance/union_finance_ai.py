@@ -4,9 +4,9 @@ import csv
 from datetime import datetime
 import io
 from typing import Any, Dict, List, Optional
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from app.finance.cashflow import get_cashflow_summary
+from app.finance.cashflow import _real_commission_query, get_cashflow_summary
 from app.finance.commissions import (
     _sync_approved_commission_to_revenue_and_product,
     record_commission,
@@ -52,6 +52,7 @@ class UnionFinanceAI:
         3. Comissão aprovada (APPROVED aguardando repasse financeiro)
         4. Comissão cancelada (CANCELLED)
         5. Comissão efetivamente paga (PAID -> Única que entra no caixa recebido)
+        REGRA ETAPA 5: Exclui estritamente produtos sintéticos/teste e fontes de simulação.
         """
         catalog_potential = float(
             self.db.query(func.coalesce(func.sum(Product.estimated_commission_value), 0.0))
@@ -60,7 +61,7 @@ class UnionFinanceAI:
             or 0.0
         )
         recorded_potential = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status == "POTENTIAL")
             .scalar()
             or 0.0
@@ -68,25 +69,25 @@ class UnionFinanceAI:
         potential_total = round(catalog_potential + recorded_potential, 2)
 
         attributed_pending = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status.in_(["PENDING", "ATTRIBUTED"]))
             .scalar()
             or 0.0
         )
         approved_unpaid = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status == "APPROVED")
             .scalar()
             or 0.0
         )
         cancelled = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status == "CANCELLED")
             .scalar()
             or 0.0
         )
         effectively_paid = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status == "PAID")
             .scalar()
             or 0.0
@@ -99,16 +100,16 @@ class UnionFinanceAI:
             "stage_4_cancelled_commission_brl": round(cancelled, 2),
             "stage_5_paid_commission_brl": round(effectively_paid, 2),
             "cash_received_brl": round(effectively_paid, 2),
-            "strict_rule": "Somente comissões com status PAID entram no caixa recebido (cash_received_brl).",
+            "strict_rule": "Somente comissões reais com status PAID entram no caixa recebido (cash_received_brl). Dados sintéticos/teste jamais entram.",
         }
 
     def get_full_indicators(self) -> Dict[str, Any]:
-        """Calcula todos os 14 indicadores exigidos na Seção 1."""
+        """Calcula todos os 14 indicadores exigidos na Seção 1 + separação estrita da Etapa 5."""
         stages = self.get_five_stage_commission_separation()
         cashflow = get_cashflow_summary(self.db)
 
         gross_commission_revenue = float(
-            self.db.query(func.coalesce(func.sum(Commission.amount), 0.0))
+            _real_commission_query(self.db)
             .filter(Commission.status.in_(["PENDING", "ATTRIBUTED", "APPROVED", "PAID"]))
             .scalar()
             or 0.0
@@ -120,7 +121,15 @@ class UnionFinanceAI:
             or 0.0
         )
 
-        # Receita por marketplace (apenas comissões APPROVED ou PAID)
+        real_comm_filters = (
+            Product.is_synthetic_test.is_(False),
+            ~Commission.source.ilike("%SYNTHETIC%"),
+            ~Commission.source.ilike("%TEST%"),
+            ~Commission.source.ilike("%SANDBOX%"),
+            ~Commission.source.ilike("%SIMUL%"),
+        )
+
+        # Receita por marketplace (apenas comissões reais APPROVED ou PAID)
         mkt_rows = (
             self.db.query(
                 Marketplace.name,
@@ -128,7 +137,8 @@ class UnionFinanceAI:
                 func.coalesce(func.sum(Commission.amount), 0.0).label("total"),
             )
             .join(Commission, Commission.marketplace_id == Marketplace.id)
-            .filter(Commission.status.in_(["APPROVED", "PAID"]))
+            .join(Product, Product.id == Commission.product_id)
+            .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
             .group_by(Marketplace.id)
             .all()
         )
@@ -146,7 +156,7 @@ class UnionFinanceAI:
             )
             .join(Product, Product.category_id == Category.id)
             .join(Commission, Commission.product_id == Product.id)
-            .filter(Commission.status.in_(["APPROVED", "PAID"]))
+            .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
             .group_by(Category.id)
             .all()
         )
@@ -163,7 +173,7 @@ class UnionFinanceAI:
                 func.coalesce(func.sum(Commission.amount), 0.0).label("total"),
             )
             .join(Commission, Commission.product_id == Product.id)
-            .filter(Commission.status.in_(["APPROVED", "PAID"]))
+            .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
             .group_by(Product.id)
             .order_by(func.sum(Commission.amount).desc())
             .all()
@@ -182,7 +192,8 @@ class UnionFinanceAI:
             )
             .join(Conversion, Conversion.campaign_id == Campaign.id)
             .join(Commission, Commission.conversion_id == Conversion.id)
-            .filter(Commission.status.in_(["APPROVED", "PAID"]))
+            .join(Product, Product.id == Commission.product_id)
+            .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
             .group_by(Campaign.id)
             .all()
         )
@@ -198,7 +209,8 @@ class UnionFinanceAI:
                 func.coalesce(func.sum(Commission.amount), 0.0).label("total"),
             )
             .join(Commission, Commission.conversion_id == Conversion.id)
-            .filter(Commission.status.in_(["APPROVED", "PAID"]))
+            .join(Product, Product.id == Commission.product_id)
+            .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
             .group_by(Conversion.channel)
             .all()
         )
@@ -207,11 +219,45 @@ class UnionFinanceAI:
             for r in chan_rows
         ]
 
+        # Conversões reais separadas por status vs conversões de teste (ETAPA 5)
+        real_conv_filters = (
+            Product.is_synthetic_test.is_(False),
+            ~Conversion.source.ilike("%SYNTHETIC%"),
+            ~Conversion.source.ilike("%TEST%"),
+            ~Conversion.source.ilike("%SANDBOX%"),
+            ~Conversion.source.ilike("%SIMUL%"),
+        )
+        pending_conversions_count = int(
+            self.db.query(func.count(Conversion.id))
+            .join(Product, Product.id == Conversion.product_id)
+            .filter(Conversion.status.in_(["PENDING", "ATTRIBUTED"]), *real_conv_filters)
+            .scalar()
+            or 0
+        )
+        approved_conversions_count = int(
+            self.db.query(func.count(Conversion.id))
+            .join(Product, Product.id == Conversion.product_id)
+            .filter(Conversion.status == "CONFIRMED", *real_conv_filters)
+            .scalar()
+            or 0
+        )
+
         paid_commissions = stages["stage_5_paid_commission_brl"]
         approved_and_paid = round(
             stages["stage_3_approved_commission_brl"] + stages["stage_5_paid_commission_brl"], 2
         )
         net_result_paid = round(paid_commissions - total_expenses, 2)
+
+        strict_financial_separation = {
+            "test_synthetic_data_brl": cashflow["test_synthetic_commissions_excluded_brl"],
+            "test_synthetic_conversions_count": cashflow["test_synthetic_conversions_excluded_count"],
+            "test_synthetic_included_in_revenue": False,
+            "pending_conversions_count": pending_conversions_count,
+            "approved_conversions_count": approved_conversions_count,
+            "estimated_commissions_brl": stages["stage_1_potential_commission_brl"],
+            "confirmed_commissions_brl": stages["stage_3_approved_commission_brl"],
+            "effectively_paid_brl": paid_commissions,
+        }
 
         return {
             "gross_commission_revenue_brl": round(gross_commission_revenue, 2),
@@ -226,6 +272,7 @@ class UnionFinanceAI:
             "net_cash_received_brl": net_result_paid,
             "cash_received_brl": paid_commissions,
             "five_stage_separation": stages,
+            "strict_financial_separation": strict_financial_separation,
             "cashflow": cashflow,
             "revenue_by_marketplace": by_marketplace,
             "revenue_by_category": by_category,

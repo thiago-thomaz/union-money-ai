@@ -23,21 +23,25 @@ WAITING_REAL_DATA = "AGUARDANDO DADOS REAIS"
 
 
 def get_dashboard_indicators(db: Session, include_synthetic: bool = False) -> Dict[str, Any]:
-    """Consolida todos os 15 indicadores exigidos na Seção 8 sem jamais inventar números."""
+    """Consolida todos os 15 indicadores exigidos na Seção 8 sem jamais inventar números ou misturar dados de teste."""
     cash = get_cashflow_summary(db)
 
-    registered_clicks = (
-        db.query(func.count(ClickLog.id))
-        .filter(ClickLog.is_valid_human.is_(True))
-        .scalar()
-        or 0
+    click_q = db.query(func.count(ClickLog.id)).join(Product, Product.id == ClickLog.product_id).filter(
+        ClickLog.is_valid_human.is_(True)
     )
-    confirmed_conversions = (
-        db.query(func.count(Conversion.id))
-        .filter(Conversion.status == "CONFIRMED")
-        .scalar()
-        or 0
+    conv_q = db.query(func.count(Conversion.id)).join(Product, Product.id == Conversion.product_id).filter(
+        Conversion.status == "CONFIRMED",
+        ~Conversion.source.ilike("%SYNTHETIC%"),
+        ~Conversion.source.ilike("%TEST%"),
+        ~Conversion.source.ilike("%SANDBOX%"),
+        ~Conversion.source.ilike("%SIMUL%"),
     )
+    if not include_synthetic:
+        click_q = click_q.filter(Product.is_synthetic_test.is_(False))
+        conv_q = conv_q.filter(Product.is_synthetic_test.is_(False))
+
+    registered_clicks = click_q.scalar() or 0
+    confirmed_conversions = conv_q.scalar() or 0
     conversion_rate_pct = (
         round((confirmed_conversions / registered_clicks) * 100.0, 2)
         if registered_clicks > 0
@@ -45,8 +49,17 @@ def get_dashboard_indicators(db: Session, include_synthetic: bool = False) -> Di
     )
 
     prod_q = db.query(func.count(Product.id)).filter(Product.is_active.is_(True))
+    content_q = db.query(func.count(ContentItem.id)).join(Product, Product.id == ContentItem.product_id)
+    pub_q = (
+        db.query(func.count(Publication.id))
+        .join(Product, Product.id == Publication.product_id)
+        .filter(Publication.status.in_(["PUBLISHED", "EXPORTED_FOR_MANUAL"]))
+    )
     if not include_synthetic:
         prod_q = prod_q.filter(Product.is_synthetic_test.is_(False))
+        content_q = content_q.filter(Product.is_synthetic_test.is_(False))
+        pub_q = pub_q.filter(Product.is_synthetic_test.is_(False))
+
     active_products = prod_q.scalar() or 0
 
     active_campaigns = (
@@ -55,19 +68,23 @@ def get_dashboard_indicators(db: Session, include_synthetic: bool = False) -> Di
         .scalar()
         or 0
     )
-    produced_contents = db.query(func.count(ContentItem.id)).scalar() or 0
-    published_items = (
-        db.query(func.count(Publication.id))
-        .filter(Publication.status.in_(["PUBLISHED", "EXPORTED_FOR_MANUAL"]))
-        .scalar()
-        or 0
+    produced_contents = content_q.scalar() or 0
+    published_items = pub_q.scalar() or 0
+
+    real_comm_filters = (
+        Product.is_synthetic_test.is_(False),
+        ~Commission.source.ilike("%SYNTHETIC%"),
+        ~Commission.source.ilike("%TEST%"),
+        ~Commission.source.ilike("%SANDBOX%"),
+        ~Commission.source.ilike("%SIMUL%"),
     )
 
-    # Melhor marketplace por comissões aprovadas ou conversões confirmadas
+    # Melhor marketplace por comissões reais aprovadas ou pagas
     best_mp_row = (
         db.query(Marketplace.name, func.coalesce(func.sum(Commission.amount), 0.0).label("total"))
         .join(Commission, Commission.marketplace_id == Marketplace.id)
-        .filter(Commission.status.in_(["APPROVED", "PAID"]))
+        .join(Product, Product.id == Commission.product_id)
+        .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
         .group_by(Marketplace.id, Marketplace.name)
         .order_by(func.sum(Commission.amount).desc())
         .first()
@@ -78,12 +95,12 @@ def get_dashboard_indicators(db: Session, include_synthetic: bool = False) -> Di
         else WAITING_REAL_DATA
     )
 
-    # Melhor categoria por comissões aprovadas
+    # Melhor categoria por comissões reais aprovadas
     best_cat_row = (
         db.query(Category.name, func.coalesce(func.sum(Commission.amount), 0.0).label("total"))
         .join(Product, Product.category_id == Category.id)
         .join(Commission, Commission.product_id == Product.id)
-        .filter(Commission.status.in_(["APPROVED", "PAID"]))
+        .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
         .group_by(Category.id, Category.name)
         .order_by(func.sum(Commission.amount).desc())
         .first()
@@ -94,11 +111,11 @@ def get_dashboard_indicators(db: Session, include_synthetic: bool = False) -> Di
         else WAITING_REAL_DATA
     )
 
-    # Melhor produto por comissões aprovadas
+    # Melhor produto por comissões reais aprovadas
     best_prod_row = (
         db.query(Product.title, func.coalesce(func.sum(Commission.amount), 0.0).label("total"))
         .join(Commission, Commission.product_id == Product.id)
-        .filter(Commission.status.in_(["APPROVED", "PAID"]))
+        .filter(Commission.status.in_(["APPROVED", "PAID"]), *real_comm_filters)
         .group_by(Product.id, Product.title)
         .order_by(func.sum(Commission.amount).desc())
         .first()
