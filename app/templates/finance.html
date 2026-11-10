@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">UNION FINANCE AI — Central Financeira, Simulador R$ 1M & Reinvestimento</h1>
+    <button class="btn btn-secondary" onclick="reconcileCommissions()">Executar Conciliação Financeira</button>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Separação Obrigatória dos 5 Estágios de Comissão (Somente Pagas Entram no Caixa Recebido)</div>
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">1. Comissão Potencial (Estimada)</div>
+            <div class="kpi-value">R$ {{ "%.2f"|format(finance_ai.five_stage_separation.stage_1_potential_commission_brl) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">2. Comissão Atribuída (Pendente)</div>
+            <div class="kpi-value amber">R$ {{ "%.2f"|format(finance_ai.five_stage_separation.stage_2_attributed_commission_brl) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">3. Comissão Aprovada (A Receber)</div>
+            <div class="kpi-value emerald">R$ {{ "%.2f"|format(finance_ai.five_stage_separation.stage_3_approved_commission_brl) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">4. Comissão Cancelada</div>
+            <div class="kpi-value red">R$ {{ "%.2f"|format(finance_ai.five_stage_separation.stage_4_cancelled_commission_brl) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">5. Comissão Paga (Caixa Recebido)</div>
+            <div class="kpi-value emerald">R$ {{ "%.2f"|format(finance_ai.five_stage_separation.stage_5_paid_commission_brl) }}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Receita Confirmada / Saldo</div>
+            <div class="kpi-value emerald">R$ {{ "%.2f"|format(cashflow.confirmed_revenue_brl) }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Importação e Validação de Relatório CSV Oficial de Marketplace</div>
+    <form onsubmit="submitCsvImport(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Marketplace *</label>
+                <select name="marketplace_slug" required>
+                    <option value="mercadolivre">Mercado Livre</option>
+                    <option value="amazon">Amazon Brasil</option>
+                    <option value="shopee">Shopee Brasil</option>
+                </select>
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label>Conteúdo CSV Oficial (external_reference,date,order_value,commission_amount,status,product_id) *</label>
+                <textarea name="csv_content" rows="4" required placeholder="external_reference,date,order_value,commission_amount,status,product_id&#10;MLB-1001,2026-11-06,250.00,20.00,PAID,1"></textarea>
+            </div>
+        </div>
+        <button class="btn" type="submit">Validar e Importar CSV Oficial</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">UNION WEALTH SIMULATOR — Simulação Matemática (12, 24, 36 e 60 Meses)</div>
+    <p style="font-size: 0.85rem; opacity: 0.85; margin-bottom: 1rem;">
+        {{ wealth_sim.simulation_disclaimer }} | Cenário atual: <strong>{{ wealth_sim.scenario }}</strong> |
+        Meta A (Patrimônio R$ 1.000.000) Realizado: <strong>{{ "%.4f"|format(wealth_sim.comparison_projected_vs_realized.goal_a_realized_patrimony_progress_pct) }}%</strong> |
+        Meta B (Receita Acumulada R$ 1.000.000) Realizado: <strong>{{ "%.4f"|format(wealth_sim.comparison_projected_vs_realized.goal_b_realized_revenue_progress_pct) }}%</strong>
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Horizonte</th>
+                <th>Visitantes/Mês</th>
+                <th>Cliques/Mês</th>
+                <th>Vendas Est./Mês</th>
+                <th>Receita Acumulada (Meta B)</th>
+                <th>Patrimônio Projetado (Meta A)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for key, h in wealth_sim.projections.items() %}
+            <tr>
+                <td><strong>{{ h.months }} meses</strong></td>
+                <td>{{ "%.0f"|format(h.monthly_visitors_at_end) }}</td>
+                <td>{{ "%.1f"|format(h.monthly_clicks_at_end) }}</td>
+                <td>{{ "%.1f"|format(h.monthly_estimated_sales_at_end) }}</td>
+                <td>R$ {{ "%.2f"|format(h.accumulated_revenue_brl) }} ({{ "%.2f"|format(h.goal_b_revenue_progress_pct) }}%)</td>
+                <td>R$ {{ "%.2f"|format(h.accumulated_patrimony_brl) }} ({{ "%.2f"|format(h.goal_a_patrimony_progress_pct) }}%)</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">UNION GROWTH MANAGER — Recomendação de Alocação do Caixa Recebido (R$ {{ "%.2f"|format(growth_rec.allocatable_cash_brl) }})</div>
+    <p style="font-size: 0.85rem; opacity: 0.85; margin-bottom: 1rem;">{{ growth_rec.governance_notice }}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Categoria</th>
+                <th>Percentual</th>
+                <th>Valor Recomendado (BRL)</th>
+                <th>Finalidade</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat_key, info in growth_rec.allocations.items() %}
+            <tr>
+                <td><strong>{{ cat_key }}</strong></td>
+                <td>{{ "%.1f"|format(info.percentage) }}%</td>
+                <td>R$ {{ "%.2f"|format(info.recommended_brl) }}</td>
+                <td>{{ info.description }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Registrar Conversão Confirmada pelo Marketplace</div>
+    <form onsubmit="submitConversion(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Produto *</label>
+                <select name="product_id" required>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">#{{ p.id }} - {{ p.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Origem (Relatório Oficial) *</label>
+                <input type="text" name="source" required placeholder="Ex: MERCADOLIVRE_AFILIADOS">
+            </div>
+            <div class="form-group">
+                <label>Valor do Pedido (R$) *</label>
+                <input type="number" step="0.01" name="order_value" required placeholder="249.90">
+            </div>
+            <div class="form-group">
+                <label>Valor da Comissão (R$) *</label>
+                <input type="number" step="0.01" name="commission_amount" required placeholder="19.99">
+            </div>
+            <div class="form-group">
+                <label>Status da Comissão</label>
+                <select name="commission_status">
+                    <option value="PENDING">PENDING (Atribuída / Pendente)</option>
+                    <option value="APPROVED">APPROVED (Aprovada)</option>
+                    <option value="PAID">PAID (Efetivamente Paga -> Entra no Caixa Recebido)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Referência Externa (ID Pedido)</label>
+                <input type="text" name="external_reference" placeholder="MLB-99887766">
+            </div>
+        </div>
+        <button class="btn" type="submit">Registrar Conversão Auditável</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Comissões Registradas (Com UID e Histórico de Alterações)</div>
+    {% if commissions and commissions|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>UID</th>
+                <th>Origem</th>
+                <th>Valor (BRL)</th>
+                <th>Status</th>
+                <th>Taxa Anunc. / Efetiva</th>
+                <th>Ref. Externa</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cm in commissions %}
+            <tr>
+                <td style="font-family: monospace; font-size: 0.78rem;">{{ cm.uid[:12] }}...</td>
+                <td>{{ cm.source }}</td>
+                <td>R$ {{ "%.2f"|format(cm.amount) }}</td>
+                <td><span class="badge badge-priority">{{ cm.status }}</span></td>
+                <td>{{ cm.announced_rate_pct or "-" }}% / {{ cm.effective_rate_pct or "-" }}%</td>
+                <td>{{ cm.external_reference or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+async function submitConversion(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+        product_id: Number(fd.get("product_id")),
+        source: fd.get("source"),
+        order_value: Number(fd.get("order_value")),
+        commission_amount: Number(fd.get("commission_amount")),
+        commission_status: fd.get("commission_status"),
+        external_reference: fd.get("external_reference") || null,
+    };
+    try {
+        await postJson("/api/finance/conversions", payload);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function submitCsvImport(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+        const res = await postJson("/api/finance/import-csv", {
+            marketplace_slug: fd.get("marketplace_slug"),
+            csv_content: fd.get("csv_content"),
+        });
+        alert("Importados: " + res.imported_count + " | Conciliados: " + res.updated_reconciled_count + " | Duplicados ignorados: " + res.duplicate_skipped_count);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function reconcileCommissions() {
+    try {
+        const res = await postJson("/api/finance/reconcile", {});
+        alert("Conciliação concluída! Comissões verificadas: " + res.total_commissions_checked);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+</script>
+{% endblock %}

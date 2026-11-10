@@ -1,0 +1,45 @@
+{% extends "site/base_site.html" %}
+{% block site_content %}
+<h1 style="font-size: 1.65rem; margin-bottom: 1rem;">
+    {% if selected_category %}Categoria: {{ selected_category.name }}{% else %}Categorias do Portal UNION OFERTAS{% endif %}
+</h1>
+
+<div style="display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 2rem;">
+    {% for cat in categories %}
+    <a href="/ofertas/categorias/{{ cat.slug }}" style="background: var(--bg-surface); border: 1px solid var(--border-sub); color: var(--text-light); padding: 0.55rem 1rem; border-radius: 8px; text-decoration: none; font-size: 0.9rem;">
+        {{ cat.name }}
+    </a>
+    {% endfor %}
+</div>
+
+{% if selected_category %}
+    <p style="color: var(--text-muted); margin-bottom: 1.25rem;">{{ selected_category.description }}</p>
+    {% if products and products|length > 0 %}
+    <div class="product-grid">
+        {% for p in products %}
+        <article class="product-card">
+            <div>
+                <span class="mp-badge">PUBLICIDADE • {{ p.marketplace_name }}</span>
+                <h3><a href="/ofertas/produto/{{ p.id }}" style="color: var(--text-light); text-decoration: none;">{{ p.title }}</a></h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">{{ p.description[:120] }}</p>
+            </div>
+            <div>
+                <div class="price-tag">R$ {{ "%.2f"|format(p.price) }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Atualizado em: {{ p.updated_at_str }}</div>
+                <a class="offer-btn" href="{{ p.tracked_href }}" rel="nofollow sponsored" target="_blank">Consultar Oferta no {{ p.marketplace_name }}</a>
+                <div class="ad-notice-near-link">
+                    {{ p.standard_disclosure }}
+                    {% if p.is_amazon %}<br>{{ p.amazon_disclosure }}{% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding: 1.5rem; background: var(--bg-surface); border-radius: 10px;">
+        AGUARDANDO DADOS REAIS nesta categoria.
+    </div>
+    {% endif %}
+{% endif %}
+{% endblock %}
+

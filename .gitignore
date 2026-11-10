@@ -1,0 +1,34 @@
+# Ambientes virtuais e caches Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.venv/
+venv/
+env/
+
+# Segredos e variáveis de ambiente locais
+.env
+.env.local
+.env.production
+
+# Banco de dados local, WAL e backups
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+backups/
+*.db
+*.db-wal
+*.db-shm
+
+# Logs e mídias geradas em runtime
+logs/*.log
+logs/*.log.*
+storage/products/*
+storage/videos/*
+storage/thumbnails/*
+storage/reports/*
+storage/publications/*
+!storage/**/.gitkeep

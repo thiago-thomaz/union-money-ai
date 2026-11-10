@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">UNION CONTENT ENGINE & UNION VIDEO ENGINE</h1>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Produzir Conteúdo Original (13 Formatos + Content Quality Score)</div>
+    <form onsubmit="submitContentGen(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Selecionar Produto *</label>
+                <select name="product_id" required>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">#{{ p.id }} - {{ p.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Formato de Conteúdo *</label>
+                <select name="content_type" required>
+                    <option value="ARTICLE">1. Artigo Completo (SEO)</option>
+                    <option value="BUYING_GUIDE">2. Guia de Compra</option>
+                    <option value="COMPARISON">3. Comparativo</option>
+                    <option value="PRODUCT_LIST">4. Lista de Produtos</option>
+                    <option value="EDITORIAL_REVIEW">5. Avaliação Editorial Factual</option>
+                    <option value="VIDEO_SCRIPT">6. Roteiro de Vídeo (7 Etapas)</option>
+                    <option value="SHORT_VIDEO">7. Vídeo Curto MP4 + Legendas .SRT</option>
+                    <option value="SOCIAL_CAPTION">8. Legenda para Redes Sociais</option>
+                    <option value="SEO_TITLE">9. Títulos SEO</option>
+                    <option value="PRODUCT_DESCRIPTION">10. Descrição Factual</option>
+                    <option value="CALL_TO_ACTION">11. Chamadas para Ação (CTAs)</option>
+                    <option value="ILLUSTRATIVE_IMAGE">12. Imagem Ilustrativa Original (1080x1080)</option>
+                    <option value="THUMBNAIL">13. Miniatura PNG (1280x720)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Proporção do Vídeo (Para Vídeo Curto)</label>
+                <select name="aspect_ratio">
+                    <option value="9:16">9:16 (Vertical Shorts/Reels)</option>
+                    <option value="16:9">16:9 (Horizontal YouTube)</option>
+                    <option value="1:1">1:1 (Quadrado Feed/Pinterest)</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn">Gerar e Validar Qualidade</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Conteúdos Produzidos</div>
+    {% if contents and contents|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Produto</th>
+                <th>Formato</th>
+                <th>Título</th>
+                <th>Provedor IA</th>
+                <th>Quality Score</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in contents %}
+            <tr>
+                <td>#{{ c.id }}</td>
+                <td>#{{ c.product_id }}</td>
+                <td><span class="badge badge-priority">{{ c.content_type }}</span></td>
+                <td><a href="/ofertas/artigos/{{ c.slug }}" target="_blank" style="color: var(--accent-emerald);">{{ c.title }}</a></td>
+                <td>{{ c.ai_provider_used }}</td>
+                <td><strong>{{ "%.1f"|format(c.quality_score or 0) }}/100</strong></td>
+                <td>{{ c.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+async function submitContentGen(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+        product_id: Number(fd.get("product_id")),
+        content_type: fd.get("content_type"),
+        aspect_ratio: fd.get("aspect_ratio") || "9:16",
+    };
+    try {
+        await postJson("/api/content/generate", payload);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+</script>
+{% endblock %}

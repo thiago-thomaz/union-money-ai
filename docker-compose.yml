@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  union_api:
+    build: .
+    container_name: union_money_ai_api
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - union_data:/app/data
+      - union_storage:/app/storage
+      - union_logs:/app/logs
+    environment:
+      - APP_ENV=production
+      - AUTONOMY_MODE=FULL
+      - ENABLE_SCHEDULER=true
+      - VPS_PROVIDER=coolify
+      - DOCKER_CONTAINER=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  union_supervisor:
+    build: .
+    container_name: union_money_ai_supervisor
+    command: ["python", "-m", "scripts.keep_alive_runner", "--continuous"]
+    volumes:
+      - union_data:/app/data
+      - union_storage:/app/storage
+      - union_logs:/app/logs
+    environment:
+      - APP_ENV=production
+      - AUTONOMY_MODE=FULL
+      - ENABLE_SCHEDULER=false
+      - SUPERVISOR_CONTINUOUS=1
+      - SUPERVISOR_POLL_SECONDS=300
+      - VPS_PROVIDER=coolify
+      - DOCKER_CONTAINER=1
+    depends_on:
+      union_api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  union_data:
+  union_storage:
+  union_logs:

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Publicações & Distribuição Multicanal</h1>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Publicar ou Exportar Conteúdo</div>
+    <form onsubmit="submitPublication(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Conteúdo *</label>
+                <select name="content_id" required>
+                    {% for c in contents %}
+                    <option value="{{ c.id }}">#{{ c.id }} ({{ c.content_type }}) - {{ c.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Canal de Destino *</label>
+                <select name="channel" required>
+                    <option value="LANDING_PAGE">Landing Page Própria (HTML5)</option>
+                    <option value="YOUTUBE">YouTube</option>
+                    <option value="INSTAGRAM">Instagram</option>
+                    <option value="PINTEREST">Pinterest</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn">Publicar / Exportar</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Histórico de Publicações</div>
+    {% if publications and publications|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Conteúdo</th>
+                <th>Canal</th>
+                <th>Status</th>
+                <th>URL / Caminho</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in publications %}
+            <tr>
+                <td>#{{ p.id }}</td>
+                <td>#{{ p.content_id }}</td>
+                <td>{{ p.channel }}</td>
+                <td><span class="badge badge-priority">{{ p.status }}</span></td>
+                <td>{{ p.published_url or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+    async function submitPublication(e) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const payload = {
+            content_id: Number(fd.get("content_id")),
+            channel: fd.get("channel"),
+        };
+        try {
+            await postJson("/api/publications", payload);
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+</script>
+{% endblock %}

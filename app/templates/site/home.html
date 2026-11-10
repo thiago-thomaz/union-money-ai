@@ -1,0 +1,68 @@
+{% extends "site/base_site.html" %}
+{% block site_content %}
+<section style="margin-bottom: 2.25rem;">
+    <h1 style="font-size: 1.85rem; margin-bottom: 0.4rem;">Curadoria Editorial de Ofertas e Guias de Compra</h1>
+    <p style="color: var(--text-muted);">
+        Análises factuais de produtos no Mercado Livre, Amazon Brasil e Shopee Brasil para ajudar você a comparar especificações e preços verificados.
+    </p>
+</section>
+
+<section style="margin-bottom: 2.5rem;">
+    <h2 style="font-size: 1.35rem; margin-bottom: 0.75rem;">Produtos Recomendados (Verificados)</h2>
+    {% if products and products|length > 0 %}
+    <div class="product-grid">
+        {% for p in products %}
+        <article class="product-card">
+            <div>
+                <span class="mp-badge">PUBLICIDADE • {{ p.marketplace_name }} • {{ p.category_name }}</span>
+                <h3 style="font-size: 1.05rem; margin-bottom: 0.4rem;">
+                    <a href="/ofertas/produto/{{ p.id }}" style="color: var(--text-light); text-decoration: none;">{{ p.title }}</a>
+                </h3>
+                <p style="font-size: 0.86rem; color: var(--text-muted);">{{ p.description[:130] }}</p>
+            </div>
+            <div>
+                <div class="price-tag">R$ {{ "%.2f"|format(p.price) }}</div>
+                <div style="font-size: 0.76rem; color: var(--text-muted);">Atualizado em: {{ p.updated_at_str }}</div>
+                <a class="offer-btn" href="{{ p.tracked_href }}" rel="nofollow sponsored" target="_blank">
+                    Consultar Oferta no {{ p.marketplace_name }}
+                </a>
+                <div class="ad-notice-near-link">
+                    <strong>Aviso de Publicidade:</strong> {{ p.standard_disclosure }}
+                    {% if p.is_amazon %}<br>{{ p.amazon_disclosure }}{% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding: 1.5rem; background: var(--bg-surface); border-radius: 10px; border: 1px dashed var(--border-sub); text-align: center;">
+        AGUARDANDO DADOS REAIS — Nenhum produto ativo publicado no momento.
+    </div>
+    {% endif %}
+</section>
+
+<section>
+    <h2 style="font-size: 1.35rem; margin-bottom: 0.75rem;">Últimos Guias, Comparativos e Artigos</h2>
+    {% if recent_articles and recent_articles|length > 0 %}
+    <div class="product-grid">
+        {% for art in recent_articles %}
+        <article class="product-card">
+            <div>
+                <span class="mp-badge">{{ art.content_type }}</span>
+                <h3 style="font-size: 1.02rem; margin-bottom: 0.5rem;">
+                    <a href="/ofertas/artigos/{{ art.slug }}" style="color: var(--text-light); text-decoration: none;">{{ art.title }}</a>
+                </h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">{{ art.meta_description or art.body[:120] }}</p>
+            </div>
+            <a class="offer-btn" href="/ofertas/artigos/{{ art.slug }}" style="margin-top: 1rem;">Ler Análise Completa</a>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding: 1.25rem; background: var(--bg-surface); border-radius: 10px; color: var(--text-muted);">
+        AGUARDANDO DADOS REAIS — Os guias e artigos aparecerão aqui assim que forem gerados.
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+

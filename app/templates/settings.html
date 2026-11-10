@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Segurança, Níveis de Autonomia, Conformidade, LGPD & Auditoria</h1>
+    <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="triggerDbBackup()">Criar Backup Verificado Agora</button>
+        <button class="btn" style="background: #dc2626;" onclick="triggerEmergencyStopGlobal()">STOP ALL AUTOMATIONS</button>
+    </div>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Modo de Operação Autônoma (Níveis 1, 2 e 3) e Travas Humanas Obrigatórias</div>
+    <p style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+        Nível Atual: <strong>{{ autonomy.level_metadata.name }}</strong> ({{ autonomy.level }}) |
+        Status de Emergência: <strong>{{ "PARADO (STOP ALL AUTOMATIONS ATIVO)" if autonomy.emergency_stop else "OPERACIONAL" }}</strong>
+    </p>
+    <form onsubmit="submitAutonomyLevel(event)" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+        <div class="form-group">
+            <label>Selecionar Nível de Autonomia</label>
+            <select name="level">
+                <option value="LEVEL_1_ASSISTED" {{ "selected" if autonomy.level == "LEVEL_1_ASSISTED" else "" }}>Nível 1 — Assistido (Aprovação total)</option>
+                <option value="LEVEL_2_SEMIAUTOMATIC" {{ "selected" if autonomy.level == "LEVEL_2_SEMIAUTOMATIC" else "" }}>Nível 2 — Semiautomático (Site próprio automático)</option>
+                <option value="LEVEL_3_CONTROLLED_AUTONOMOUS" {{ "selected" if autonomy.level == "LEVEL_3_CONTROLLED_AUTONOMOUS" else "" }}>Nível 3 — Autônomo Controlado (Com 7 travas humanas)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn">Atualizar Nível de Autonomia</button>
+        {% if autonomy.emergency_stop %}
+        <button type="button" class="btn btn-secondary" onclick="resumeAutomations()">Retomar Automações</button>
+        {% endif %}
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Checklist de Conformidade por Marketplace e Canal (Validade Limitada)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Canal / Marketplace</th>
+                <th>Tipo</th>
+                <th>Status Integração</th>
+                <th>Termos Aceitos</th>
+                <th>Disclosure Afiliado</th>
+                <th>Limite Diário</th>
+                <th>Validade Revisão</th>
+                <th>Ação Imediata</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in compliance_checklist %}
+            <tr>
+                <td><strong>{{ c.target_name }}</strong> ({{ c.target_slug }})</td>
+                <td>{{ c.target_type }}</td>
+                <td><span class="badge badge-priority">{{ c.integration_status }}</span></td>
+                <td>{{ "SIM" if c.terms_accepted else "PENDENTE" }}</td>
+                <td>{{ "OBRIGATÓRIO" if c.affiliate_disclosure_required else "OPCIONAL" }}</td>
+                <td>{{ c.daily_limit }}/dia</td>
+                <td>{{ "EXPIRADA / REVISAR" if c.is_verification_expired else (c.validity_days ~ " dias") }}</td>
+                <td>
+                    <button class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="disableIntegration('{{ c.target_slug }}')">Desativar</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Pesos Configuráveis do Product Opportunity Score (Soma = 100)</div>
+    <form onsubmit="submitWeights(event)">
+        <div class="form-grid">
+            {% for key, val in weights.items() %}
+            <div class="form-group">
+                <label>{{ key }}</label>
+                <input type="number" step="0.5" name="{{ key }}" value="{{ val }}" required>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn">Salvar Pesos de Pontuação</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Jobs Autônomos Registrados (APScheduler Nativo - Zero n8n)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Job ID</th>
+                <th>Próxima Execução (UTC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for j in scheduler_jobs %}
+            <tr>
+                <td><strong>{{ j.id }}</strong></td>
+                <td>{{ j.next_run_time or "Agendado" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Trilha de Auditoria Recente</div>
+    {% if audit_logs and audit_logs|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Data (UTC)</th>
+                <th>Ator</th>
+                <th>Ação</th>
+                <th>Entidade</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in audit_logs %}
+            <tr>
+                <td>{{ a.created_at }}</td>
+                <td>{{ a.actor }}</td>
+                <td>{{ a.action }}</td>
+                <td>{{ a.entity_type }} #{{ a.entity_id or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+async function submitWeights(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {};
+    for (const [k, v] of fd.entries()) {
+        payload[k] = Number(v);
+    }
+    try {
+        await postJson("/api/settings/weights", payload, "PUT");
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function submitAutonomyLevel(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+        await postJson("/api/autonomy/config", { level: fd.get("level") }, "PUT");
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function resumeAutomations() {
+    try {
+        await postJson("/api/security/resume-automations", { actor: "admin", reason: "Retomada manual na tela de configurações" });
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function disableIntegration(slug) {
+    try {
+        await postJson("/api/security/integrations/" + slug + "/disable", { actor: "admin", reason: "Desativado manualmente pelo painel" });
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function triggerDbBackup() {
+    try {
+        const res = await postJson("/api/settings/backup", {});
+        alert("Backup salvo em: " + res.backup_path + " | Integridade: " + res.integrity.integrity_check);
+    } catch (err) {
+        alert(err.message);
+    }
+}
+</script>
+{% endblock %}

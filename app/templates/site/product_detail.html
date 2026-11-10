@@ -1,0 +1,58 @@
+{% extends "site/base_site.html" %}
+{% block extra_head %}
+<script type="application/ld+json">
+{{ json_ld_str | safe }}
+</script>
+{% endblock %}
+{% block site_content %}
+<article class="product-card" style="max-width: 820px; margin: 0 auto;">
+    <div>
+        <span class="mp-badge">PUBLICIDADE • {{ product.marketplace_name }} • {{ product.category_name }}</span>
+        <h1 style="font-size: 1.7rem; margin-bottom: 0.75rem;">{{ product.title }}</h1>
+
+        {% if product.image_url %}
+        <div style="margin: 1rem 0;">
+            <img src="{{ product.image_url }}" alt="{{ product.title }}" style="max-width: 280px; border-radius: 8px; border: 1px solid var(--border-sub);">
+        </div>
+        {% endif %}
+
+        <h2 style="font-size: 1.15rem; margin-top: 1rem; margin-bottom: 0.4rem;">Descrição Factual</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">{{ product.description }}</p>
+
+        <div class="price-tag">R$ {{ "%.2f"|format(product.price) }}</div>
+        {% if product.original_price %}
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Preço anterior verificado: R$ {{ "%.2f"|format(product.original_price) }} ({{ "%.1f"|format(product.discount_pct) }}% de redução comprovada)
+        </p>
+        {% endif %}
+
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.5rem;">
+            <strong>Marketplace:</strong> {{ product.marketplace_name }} |
+            <strong>Categoria:</strong> {{ product.category_name }} |
+            <strong>Data de atualização:</strong> {{ product.updated_at_str }}
+        </p>
+
+        <a class="offer-btn" href="{{ product.tracked_href }}" rel="nofollow sponsored" target="_blank" style="max-width: 360px;">
+            Consultar Oferta no {{ product.marketplace_name }}
+        </a>
+
+        <div class="ad-notice-near-link" style="margin-top: 0.85rem;">
+            <strong>Aviso Obrigatório de Afiliado:</strong> {{ product.standard_disclosure }}
+            {% if product.is_amazon %}<br><strong>Declaração Amazon:</strong> {{ product.amazon_disclosure }}{% endif %}
+            <br>Não somos o vendedor do produto; a transação ocorre integralmente no ambiente oficial do {{ product.marketplace_name }}.
+        </div>
+    </div>
+
+    {% if internal_links and internal_links|length > 0 %}
+    <div style="margin-top: 1.75rem; border-top: 1px solid var(--border-sub); padding-top: 1rem;">
+        <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Leituras e Ofertas Relacionadas</h3>
+        <ul style="padding-left: 1.2rem;">
+            {% for lk in internal_links %}
+            <li><a href="{{ lk.url }}" style="color: var(--brand-emerald); text-decoration: none;">{{ lk.anchor }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</article>
+{% endblock %}
+

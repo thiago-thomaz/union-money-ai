@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <style>
+        :root {
+            --bg-main: #0f172a;
+            --bg-surface: #1e293b;
+            --border-sub: #334155;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --brand-emerald: #10b981;
+            --brand-emerald-dark: #059669;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+        .disclosure-top {
+            background-color: #064e3b;
+            color: #d1fae5;
+            font-size: 0.82rem;
+            text-align: center;
+            padding: 0.55rem 1rem;
+            border-bottom: 1px solid #047857;
+        }
+        header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-sub);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .site-logo {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--brand-emerald);
+            text-decoration: none;
+            letter-spacing: 0.03em;
+        }
+        nav {
+            display: flex;
+            gap: 1.1rem;
+            flex-wrap: wrap;
+        }
+        nav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 500;
+        }
+        nav a:hover { color: var(--brand-emerald); }
+        .container {
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem;
+        }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.25rem;
+        }
+        .product-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-sub);
+            border-radius: 12px;
+            padding: 1.35rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .mp-badge {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            margin-bottom: 0.5rem;
+        }
+        .price-tag {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #34d399;
+            margin: 0.65rem 0;
+        }
+        .offer-btn {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            background-color: var(--brand-emerald);
+            color: #022c22;
+            font-weight: 700;
+            text-decoration: none;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-top: 0.65rem;
+        }
+        .offer-btn:hover { background-color: var(--brand-emerald-dark); }
+        .ad-notice-near-link {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            margin-top: 0.55rem;
+            line-height: 1.35;
+            background: rgba(15, 23, 42, 0.55);
+            padding: 0.5rem;
+            border-radius: 6px;
+        }
+        footer {
+            margin-top: 3rem;
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--border-sub);
+            padding: 2rem 1.25rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 1.25rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+        .footer-links a:hover { color: var(--brand-emerald); }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="disclosure-top">
+        <strong>Aviso de Transparência:</strong> {{ standard_disclosure }} {{ amazon_disclosure }}
+    </div>
+    <header>
+        <a href="/ofertas" class="site-logo">UNION OFERTAS</a>
+        <nav>
+            <a href="/ofertas">Início</a>
+            <a href="/ofertas/categorias">Categorias</a>
+            <a href="/ofertas/recomendados">Produtos Recomendados</a>
+            <a href="/ofertas/comparativos">Comparativos</a>
+            <a href="/ofertas/guias">Guias de Compra</a>
+            <a href="/ofertas/artigos">Artigos</a>
+            <a href="/ofertas/sobre">Sobre</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        {% block site_content %}{% endblock %}
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="/ofertas/sobre">Sobre</a>
+            <a href="/ofertas/privacidade">Política de Privacidade</a>
+            <a href="/ofertas/cookies">Política de Cookies</a>
+            <a href="/ofertas/contato">Contato</a>
+            <a href="/ofertas/aviso-afiliados">Aviso de Afiliados</a>
+        </div>
+        <p>{{ standard_disclosure }}</p>
+        <p style="margin-top: 0.35rem;">{{ amazon_disclosure }}</p>
+        <p style="margin-top: 0.5rem;">UNION OFERTAS é um portal editorial independente de curadoria e análise de ofertas. Não somos a loja vendedora.</p>
+    </footer>
+</body>
+</html>
+

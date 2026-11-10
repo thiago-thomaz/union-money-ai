@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} | UNION MONEY AI</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="brand">UNION MONEY AI</div>
+        <div class="brand-sub">Inteligência Comercial & Afiliados</div>
+        <ul class="nav-links">
+            <li><a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Painel Principal</a></li>
+            <li><a href="/autopilot" class="{{ 'active' if request.url.path.startswith('/autopilot') else '' }}">UNION AUTOPILOT</a></li>
+            <li><a href="/products" class="{{ 'active' if request.url.path.startswith('/products') else '' }}">Produtos (CRUD)</a></li>
+            <li><a href="/opportunities" class="{{ 'active' if request.url.path.startswith('/opportunities') else '' }}">Motor de Inteligência</a></li>
+            <li><a href="/campaigns" class="{{ 'active' if request.url.path.startswith('/campaigns') else '' }}">Campanhas & Testes A/B</a></li>
+            <li><a href="/content" class="{{ 'active' if request.url.path.startswith('/content') else '' }}">UNION CONTENT ENGINE</a></li>
+            <li><a href="/publications" class="{{ 'active' if request.url.path.startswith('/publications') else '' }}">Publicações</a></li>
+            <li><a href="/finance" class="{{ 'active' if request.url.path.startswith('/finance') else '' }}">UNION FINANCE AI</a></li>
+            <li><a href="/integrations" class="{{ 'active' if request.url.path.startswith('/integrations') else '' }}">Integrações</a></li>
+            <li><a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">Segurança, Conformidade & Logs</a></li>
+            <li><a href="/ofertas" target="_blank" style="border: 1px solid var(--accent-emerald); color: var(--accent-emerald); margin-top: 0.5rem;">Portal UNION OFERTAS ↗</a></li>
+        </ul>
+        <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08);">
+            <button type="button" onclick="triggerEmergencyStopGlobal()" style="width: 100%; background: #dc2626; color: #fff; border: 1px solid #ef4444; padding: 0.65rem; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.78rem;">
+                STOP ALL AUTOMATIONS
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+    async function triggerEmergencyStopGlobal() {
+        try {
+            const res = await postJson("/api/security/stop-all-automations", {
+                actor: "admin",
+                reason: "Acionamento do botão STOP ALL AUTOMATIONS pela barra lateral"
+            });
+            alert("PARADA DE EMERGÊNCIA ATIVADA: " + res.status + " | Publicações interrompidas: " + res.interrupted_publications_count);
+            window.location.reload();
+        } catch (err) {
+            alert("Erro ao acionar parada de emergência: " + err.message);
+        }
+    }
+    </script>
+</body>
+</html>

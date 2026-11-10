@@ -1,0 +1,43 @@
+{% extends "site/base_site.html" %}
+{% block site_content %}
+<h1 style="font-size: 1.65rem; margin-bottom: 1rem;">{{ section_heading }}</h1>
+
+{% if selected_article %}
+<article class="product-card" style="max-width: 860px; margin: 0 auto;">
+    <span class="mp-badge">{{ selected_article.content_type }} • Quality Score: {{ "%.1f"|format(selected_article.quality_score or 0) }}/100</span>
+    <div style="white-space: pre-wrap; margin-top: 1rem; font-size: 0.96rem; color: var(--text-light);">{{ selected_article.body }}</div>
+
+    {% if article_product %}
+    <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-sub);">
+        <a class="offer-btn" href="{{ article_product.tracked_href }}" rel="nofollow sponsored" target="_blank" style="max-width: 360px;">
+            Consultar Oferta no {{ article_product.marketplace_name }}
+        </a>
+        <div class="ad-notice-near-link">
+            {{ standard_disclosure }}
+            {% if article_product.is_amazon %}<br>{{ amazon_disclosure }}{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</article>
+{% else %}
+    {% if articles and articles|length > 0 %}
+    <div class="product-grid">
+        {% for art in articles %}
+        <article class="product-card">
+            <div>
+                <span class="mp-badge">{{ art.content_type }}</span>
+                <h3><a href="/ofertas/artigos/{{ art.slug }}" style="color: var(--text-light); text-decoration: none;">{{ art.title }}</a></h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem;">{{ art.meta_description or art.body[:140] }}</p>
+            </div>
+            <a class="offer-btn" href="/ofertas/artigos/{{ art.slug }}" style="margin-top: 1rem;">Ler Conteúdo</a>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding: 1.5rem; background: var(--bg-surface); border-radius: 10px;">
+        AGUARDANDO DADOS REAIS
+    </div>
+    {% endif %}
+{% endif %}
+{% endblock %}
+

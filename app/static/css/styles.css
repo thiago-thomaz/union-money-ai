@@ -1,0 +1,314 @@
+:root {
+    --bg-primary: #0b1120;
+    --bg-secondary: #111827;
+    --bg-card: #1e293b;
+    --border-color: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent-emerald: #10b981;
+    --accent-emerald-hover: #059669;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-blue: #3b82f6;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.5;
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 260px;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    padding: 1.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.brand {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--accent-emerald);
+    letter-spacing: 0.04em;
+    margin-bottom: 0.25rem;
+}
+
+.brand-sub {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.75rem;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.nav-links a {
+    display: block;
+    padding: 0.65rem 0.9rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: var(--accent-emerald);
+}
+
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-x: auto;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.75rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.status-pill.waiting {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-amber);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.kpi-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1.15rem;
+}
+
+.kpi-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+}
+
+.kpi-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.kpi-value.emerald {
+    color: var(--accent-emerald);
+}
+
+.kpi-value.amber {
+    color: var(--accent-amber);
+}
+
+.kpi-value.red {
+    color: var(--accent-red);
+}
+
+.section-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.waiting-banner {
+    padding: 1.5rem;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    color: var(--accent-amber);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.form-group label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+input,
+select,
+textarea {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.btn {
+    background-color: var(--accent-emerald);
+    color: #022c22;
+    border: none;
+    padding: 0.65rem 1.2rem;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.15s;
+}
+
+.btn:hover {
+    background-color: var(--accent-emerald-hover);
+}
+
+.btn-secondary {
+    background-color: #334155;
+    color: var(--text-primary);
+}
+
+.btn-danger {
+    background-color: var(--accent-red);
+    color: #fff;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.badge-priority {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.badge-warn {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.badge-danger {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    height: 180px;
+    padding-top: 1rem;
+}
+
+.chart-bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.chart-bar {
+    width: 100%;
+    max-width: 48px;
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    border-radius: 6px 6px 0 0;
+    min-height: 4px;
+}
+
+@media (max-width: 860px) {
+    body {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+}

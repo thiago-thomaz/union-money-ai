@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Motor de Inteligência Comercial & Nichos</h1>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Desempenho por Categoria Inicial (10 Nichos Estruturais + Expansível)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Categoria</th>
+                <th>Produtos Ativos</th>
+                <th>Score Médio</th>
+                <th>Cliques Humanos</th>
+                <th>Conversões Confirmadas</th>
+                <th>Comissões Aprovadas (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for n in niches %}
+            <tr>
+                <td><strong>{{ n.name }}</strong></td>
+                <td>{{ n.active_products }}</td>
+                <td>{{ "%.1f"|format(n.average_opportunity_score) if n.average_opportunity_score is not none else "AGUARDANDO DADOS REAIS" }}</td>
+                <td>{{ n.clicks }}</td>
+                <td>{{ n.confirmed_conversions }}</td>
+                <td>R$ {{ "%.2f"|format(n.approved_commissions_brl) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Ranking de Oportunidades (Product Opportunity Score)</div>
+    {% if opportunities and opportunities|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>Preço</th>
+                <th>Score</th>
+                <th>Classificação</th>
+                <th>Confiança</th>
+                <th>Dados Verificados vs Estimados</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for op in opportunities %}
+            <tr>
+                <td>{{ op.title }}</td>
+                <td>R$ {{ "%.2f"|format(op.price) }}</td>
+                <td><strong>{{ "%.1f"|format(op.opportunity_score) if op.opportunity_score is not none else "N/D" }}</strong></td>
+                <td><span class="badge badge-priority">{{ op.score_classification }}</span></td>
+                <td>{{ "%.1f"|format(op.confidence_score) }}%</td>
+                <td style="font-size: 0.8rem; color: var(--text-secondary);">
+                    Verificados: {{ op.score_breakdown.get('data_separation', {}).get('verified', [])|length }} |
+                    Estimados: {{ op.score_breakdown.get('data_separation', {}).get('estimated', [])|length }} |
+                    Indisponíveis: {{ op.score_breakdown.get('data_separation', {}).get('unavailable', [])|length }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+{% endblock %}
+

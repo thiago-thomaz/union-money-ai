@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Conectores de Marketplaces & Importação Manual Autorizada</h1>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Status Real dos Conectores (Sem Simulação de Integração)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Marketplace</th>
+                <th>Modo Operacional</th>
+                <th>Disponibilidade</th>
+                <th>Credenciais API</th>
+                <th>Tag Afiliado</th>
+                <th>Requisitos Oficiais</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for st in connector_statuses %}
+            <tr>
+                <td><strong>{{ st.marketplace }}</strong></td>
+                <td>{{ st.integration_mode }}</td>
+                <td>
+                    <span class="badge {{ 'badge-priority' if st.availability_status == 'READY' else 'badge-warn' }}">
+                        {{ st.availability_status }}
+                    </span>
+                </td>
+                <td>{{ "Ativas" if st.has_api_credentials else "Não configuradas" }}</td>
+                <td>{{ "Configurada" if st.has_affiliate_tag else "Manual por Link" }}</td>
+                <td style="font-size: 0.8rem; color: var(--text-secondary);">{{ st.official_requirements }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Importação Manual de Produto e Link de Afiliado Autorizado</div>
+    <form onsubmit="submitManualImport(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Marketplace *</label>
+                <select name="marketplace_slug" required>
+                    <option value="mercadolivre">Mercado Livre</option>
+                    <option value="amazon">Amazon Brasil</option>
+                    <option value="shopee">Shopee Brasil</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Categoria *</label>
+                <select name="category_id" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Título do Produto *</label>
+                <input type="text" name="title" required placeholder="Nome exato na plataforma">
+            </div>
+            <div class="form-group">
+                <label>Preço Verificado (R$) *</label>
+                <input type="number" step="0.01" name="price" required placeholder="199.90">
+            </div>
+            <div class="form-group">
+                <label>Comissão Anunciada (%)</label>
+                <input type="number" step="0.1" name="announced_commission_rate" placeholder="10.0">
+            </div>
+            <div class="form-group">
+                <label>URL Oficial do Produto *</label>
+                <input type="url" name="product_url" required placeholder="https://...">
+            </div>
+            <div class="form-group">
+                <label>Link de Afiliado Gerado na Plataforma</label>
+                <input type="url" name="affiliate_url" placeholder="https://...">
+            </div>
+        </div>
+        <button type="submit" class="btn">Importar Produto Verificado</button>
+    </form>
+</div>
+
+<script>
+async function submitManualImport(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const slug = fd.get("marketplace_slug");
+    const payload = {
+        title: fd.get("title"),
+        product_url: fd.get("product_url"),
+        affiliate_url: fd.get("affiliate_url") || null,
+        category_id: Number(fd.get("category_id")),
+        price: Number(fd.get("price")),
+        announced_commission_rate: fd.get("announced_commission_rate") ? Number(fd.get("announced_commission_rate")) : null,
+        demand_index: 75,
+        competition_index: 35,
+        content_potential_index: 80,
+    };
+    try {
+        await postJson(`/api/integrations/${slug}/manual-import`, payload);
+        window.location.href = "/products";
+    } catch (err) {
+        alert(err.message);
+    }
+}
+</script>
+{% endblock %}
+

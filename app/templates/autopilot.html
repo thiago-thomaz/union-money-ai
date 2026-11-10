@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">UNION AUTOPILOT — Orquestrador Central & Monitoramento</h1>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">
+            Provedor IA Ativo: <strong>{{ ai_status.active_provider }}</strong> |
+            Saúde do Sistema: <strong>{{ diagnostics.application_status }}</strong>
+        </p>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+        <button class="btn" onclick="runAutopilotNow()">Executar Ciclo Completo Agora</button>
+    </div>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-label">Memória RAM Usada</div>
+        <div class="kpi-value">{{ "%.1f"|format(diagnostics.resources.ram_used_pct) }}%</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Espaço Livre em Disco</div>
+        <div class="kpi-value emerald">{{ "%.1f"|format(diagnostics.resources.disk_free_pct) }}%</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Links Ativos / Pausados</div>
+        <div class="kpi-value">{{ diagnostics.links.active_links }} / {{ diagnostics.links.invalid_or_paused_links }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Alertas Abertos</div>
+        <div class="kpi-value {{ 'amber' if diagnostics.open_alerts_count > 0 else 'emerald' }}">{{ diagnostics.open_alerts_count }}</div>
+    </div>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Frequências Configuráveis do UNION AUTOPILOT (Minutos)</div>
+    <form onsubmit="saveFrequencies(event)">
+        <div class="form-grid">
+            {% for k, v in frequencies.items() %}
+            <div class="form-group">
+                <label>{{ k }}</label>
+                <input type="number" min="1" name="{{ k }}" value="{{ v }}" required>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-secondary">Atualizar Frequências</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Fila Editorial (RASCUNHO / EM_REVISAO / APROVADO / AGENDADO / PUBLICADO / FALHOU / ARQUIVADO)</div>
+    {% if queue_items and queue_items|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Formato</th>
+                <th>Canal</th>
+                <th>Quality Score</th>
+                <th>Estado</th>
+                <th>URL / Pacote</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for q in queue_items %}
+            <tr>
+                <td>#{{ q.id }}</td>
+                <td>{{ q.title }}</td>
+                <td>{{ q.content_format }}</td>
+                <td>{{ q.target_channel }}</td>
+                <td>{{ "%.1f"|format(q.quality_score) }}</td>
+                <td><span class="badge badge-priority">{{ q.state }}</span></td>
+                <td style="font-size: 0.8rem;">{{ q.published_url or q.package_path or "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<div class="section-card">
+    <div class="section-title">Relatório do UNION LINK MANAGER</div>
+    {% if link_reports and link_reports|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Código Interno</th>
+                <th>Produto</th>
+                <th>Marketplace</th>
+                <th>Canal</th>
+                <th>Validade</th>
+                <th>Cliques Humanos</th>
+                <th>Conversões</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lr in link_reports %}
+            <tr>
+                <td><code>{{ lr.internal_path }}</code></td>
+                <td>{{ lr.product_title }}</td>
+                <td>{{ lr.marketplace }}</td>
+                <td>{{ lr.channel }}</td>
+                <td><span class="badge {{ 'badge-priority' if lr.validity_status == 'VALID' else 'badge-warn' }}">{{ lr.validity_status }}</span></td>
+                <td>{{ lr.human_clicks }}</td>
+                <td>{{ lr.confirmed_conversions }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<div class="section-card">
+    <div class="section-title">Execuções Recentes do UNION AUTOPILOT</div>
+    {% if recent_runs and recent_runs|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Tarefa</th>
+                <th>Status</th>
+                <th>Tentativas</th>
+                <th>Duração (ms)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in recent_runs %}
+            <tr>
+                <td>#{{ r.id }}</td>
+                <td>{{ r.task_name }}</td>
+                <td><span class="badge badge-priority">{{ r.status }}</span></td>
+                <td>{{ r.attempt_count }}</td>
+                <td>{{ "%.1f"|format(r.duration_ms or 0) }} ms</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+async function runAutopilotNow() {
+    try {
+        await postJson("/api/autopilot/run", { auto_publish_site: true });
+        window.location.reload();
+    } catch (err) {
+        alert("Erro ao executar Autopilot: " + err.message);
+    }
+}
+
+async function saveFrequencies(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {};
+    for (const [k, v] of fd.entries()) {
+        payload[k] = Number(v);
+    }
+    try {
+        await postJson("/api/autopilot/frequencies", payload, "PUT");
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+</script>
+{% endblock %}
+

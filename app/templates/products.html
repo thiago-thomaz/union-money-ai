@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Gerenciamento de Produtos (CRUD & Pontuação Automática)</h1>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Cadastrar Novo Produto Autorizado</div>
+    <form id="productForm" onsubmit="submitProductForm(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Título do Produto *</label>
+                <input type="text" name="title" required placeholder="Ex: Fone Bluetooth Cancelamento de Ruído">
+            </div>
+            <div class="form-group">
+                <label>Marketplace *</label>
+                <select name="marketplace_id" required>
+                    {% for mp in marketplaces %}
+                    <option value="{{ mp.id }}">{{ mp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Categoria *</label>
+                <select name="category_id" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Preço Atual (R$) *</label>
+                <input type="number" step="0.01" name="price" required placeholder="149.90">
+            </div>
+            <div class="form-group">
+                <label>Preço Original (R$)</label>
+                <input type="number" step="0.01" name="original_price" placeholder="199.90">
+            </div>
+            <div class="form-group">
+                <label>Comissão Anunciada (%)</label>
+                <input type="number" step="0.1" name="announced_commission_rate" placeholder="8.5">
+            </div>
+            <div class="form-group">
+                <label>Nota Avaliação (0-5)</label>
+                <input type="number" step="0.1" name="rating" placeholder="4.8">
+            </div>
+            <div class="form-group">
+                <label>Qtd. Avaliações</label>
+                <input type="number" name="review_count" placeholder="320">
+            </div>
+            <div class="form-group">
+                <label>Índice de Demanda (0-100)</label>
+                <input type="number" step="1" name="demand_index" placeholder="85">
+            </div>
+            <div class="form-group">
+                <label>Índice de Concorrência (0-100)</label>
+                <input type="number" step="1" name="competition_index" placeholder="30">
+            </div>
+            <div class="form-group">
+                <label>Potencial de Conteúdo (0-100)</label>
+                <input type="number" step="1" name="content_potential_index" placeholder="90">
+            </div>
+            <div class="form-group">
+                <label>URL Oficial do Produto *</label>
+                <input type="url" name="product_url" required placeholder="https://www.mercadolivre.com.br/...">
+            </div>
+            <div class="form-group">
+                <label>Link de Afiliado Oficial (Opcional)</label>
+                <input type="url" name="affiliate_url" placeholder="https://mercadolivre.com/sec/...">
+            </div>
+        </div>
+        <button type="submit" class="btn">Salvar e Calcular Opportunity Score</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Produtos Ativos no Catálogo</div>
+    {% if products and products|length > 0 %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Preço</th>
+                <th>Comissão Anunc. / Efetiva</th>
+                <th>Score (0-100)</th>
+                <th>Classificação</th>
+                <th>Confiança</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in products %}
+            <tr>
+                <td>#{{ p.id }}</td>
+                <td><a href="{{ p.affiliate_url or p.product_url }}" target="_blank" style="color: var(--accent-emerald);">{{ p.title }}</a></td>
+                <td>R$ {{ "%.2f"|format(p.price) }}</td>
+                <td>
+                    {{ "%.1f%%"|format(p.announced_commission_rate) if p.announced_commission_rate is not none else "N/D" }}
+                    /
+                    {{ "%.1f%%"|format(p.effective_commission_rate) if p.effective_commission_rate is not none else "-" }}
+                </td>
+                <td><strong>{{ "%.1f"|format(p.opportunity_score) if p.opportunity_score is not none else "Sem nota" }}</strong></td>
+                <td><span class="badge badge-priority">{{ p.score_classification }}</span></td>
+                <td>{{ "%.1f"|format(p.confidence_score) }}%</td>
+                <td>
+                    <button class="btn btn-danger" style="padding: 0.3rem 0.65rem; font-size: 0.78rem;" onclick="deleteProductById({{ p.id }})">Desativar</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="waiting-banner">AGUARDANDO DADOS REAIS</div>
+    {% endif %}
+</div>
+
+<script>
+async function submitProductForm(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const numFields = ["marketplace_id", "category_id", "price", "original_price", "announced_commission_rate", "rating", "review_count", "demand_index", "competition_index", "content_potential_index"];
+    const payload = {};
+    for (const [k, v] of fd.entries()) {
+        if (v === "") continue;
+        payload[k] = numFields.includes(k) ? Number(v) : v;
+    }
+    try {
+        await postJson("/api/products", payload);
+        window.location.reload();
+    } catch (err) {
+        alert("Erro ao salvar produto: " + err.message);
+    }
+}
+</script>
+{% endblock %}
+
