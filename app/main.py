@@ -31,6 +31,27 @@ from app.core.logging import logger
 from app.core.scheduler import union_scheduler
 from app.database import SessionLocal
 from migrations.migration_runner import run_migrations
+from scripts.keep_alive_runner import run_supervisor_health_and_recovery_tick
+
+
+def _run_orchestrator_6h_cycle_job() -> None:
+    with SessionLocal() as db:
+        UnionAutonomousOrchestrator(db).execute_cycle("every_6_hours")
+
+
+def _run_orchestrator_daily_cycle_job() -> None:
+    with SessionLocal() as db:
+        UnionAutonomousOrchestrator(db).execute_cycle("daily")
+
+
+def _run_orchestrator_weekly_cycle_job() -> None:
+    with SessionLocal() as db:
+        UnionAutonomousOrchestrator(db).execute_cycle("weekly")
+
+
+def _run_orchestrator_monthly_cycle_job() -> None:
+    with SessionLocal() as db:
+        UnionAutonomousOrchestrator(db).execute_cycle("monthly")
 
 
 @asynccontextmanager
@@ -66,6 +87,21 @@ async def lifespan(app: FastAPI):
         )
         union_scheduler.register_interval_job(
             "system_health_check", run_system_health_check_job, minutes=15
+        )
+        union_scheduler.register_interval_job(
+            "supervisor_health_and_backup", run_supervisor_health_and_recovery_tick, minutes=180
+        )
+        union_scheduler.register_interval_job(
+            "orchestrator_every_6_hours", _run_orchestrator_6h_cycle_job, minutes=360
+        )
+        union_scheduler.register_interval_job(
+            "orchestrator_daily", _run_orchestrator_daily_cycle_job, minutes=1440
+        )
+        union_scheduler.register_interval_job(
+            "orchestrator_weekly", _run_orchestrator_weekly_cycle_job, minutes=10080
+        )
+        union_scheduler.register_interval_job(
+            "orchestrator_monthly", _run_orchestrator_monthly_cycle_job, minutes=43200
         )
         union_scheduler.start()
 
