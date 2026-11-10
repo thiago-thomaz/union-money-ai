@@ -32,3 +32,4 @@ storage/thumbnails/*
 storage/reports/*
 storage/publications/*
 !storage/**/.gitkeep
+

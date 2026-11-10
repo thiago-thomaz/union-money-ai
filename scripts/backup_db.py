@@ -92,7 +92,7 @@ def _export_sanitized_settings_and_contents(backup_folder: Path, timestamp: str)
 
 def cleanup_old_backups(target_dir: Optional[Path] = None, keep_last: int = 10) -> int:
     """Remove backups antigos mantendo os N mais recentes conforme política configurável."""
-    backup_folder = target_dir or (settings.data_dir / "backups")
+    backup_folder = target_dir or settings.backups_dir
     if not backup_folder.exists():
         return 0
     db_files = sorted(
@@ -116,7 +116,7 @@ def create_sqlite_backup(
     backup_type: str = "DAILY",
 ) -> Path:
     """Realiza backup atômico online do banco SQLite, exporta configurações sem segredos e valida integridade."""
-    backup_folder = target_dir or (settings.data_dir / "backups")
+    backup_folder = target_dir or settings.backups_dir
     backup_folder.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")

@@ -19,8 +19,9 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "UNION MONEY AI"
     SITE_NAME: str = "UNION OFERTAS"
-    APP_VERSION: str = "4.0.0"
+    APP_VERSION: str = "5.1.0"
     APP_ENV: str = "development"
+    BACKUP_RETENTION_COUNT: int = 15
     APP_HOST: str = "127.0.0.1"
     APP_PORT: int = 8000
     PUBLIC_BASE_URL: str = "http://127.0.0.1:8000"
@@ -183,6 +184,13 @@ class Settings(BaseSettings):
         path = BASE_DIR / "storage"
         for sub in ("products", "videos", "thumbnails", "reports", "publications"):
             (path / sub).mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def backups_dir(self) -> Path:
+        """Diretório persistente dedicado para backups (/app/backups), separado de /app/data."""
+        path = BASE_DIR / "backups"
+        path.mkdir(parents=True, exist_ok=True)
         return path
 
 
