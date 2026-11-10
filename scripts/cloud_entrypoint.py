@@ -3,6 +3,7 @@
 import os
 import sys
 import uvicorn
+from app.automation.autonomous_orchestrator import UnionAutonomousOrchestrator
 from app.config import settings
 from app.core.cloud_runtime import (
     CloudAvailabilityMonitor,
@@ -12,6 +13,7 @@ from app.core.cloud_runtime import (
 )
 from app.core.logging import logger
 from app.database import SessionLocal
+from app.integrations.union_connect import UnionConnect
 from migrations.migration_runner import run_migrations
 
 
@@ -25,8 +27,13 @@ def run_cloud_preflight_and_deploy_gate() -> dict:
     run_migrations()
 
     with SessionLocal() as db:
+        UnionConnect(db).load_persisted_runtime_credentials()
         leader_res = SchedulerLeaderLock.acquire_or_renew_leadership(db)
         worker_res = CloudTaskWorker(db).detect_and_recover_stalled_jobs()
+        if leader_res.get("acquired", False):
+            orch = UnionAutonomousOrchestrator(db)
+            orch.execute_cycle("every_6_hours")
+            orch.execute_cycle("daily")
         backup_res = CloudAvailabilityMonitor(db).run_separate_cloud_backup_and_test_restore(
             keep_last=settings.BACKUP_RETENTION_COUNT
         )
@@ -67,3 +74,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

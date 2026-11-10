@@ -3,9 +3,13 @@
 Política de Integração:
 - Suporta a API oficial Shopee Affiliate Open Platform (`https://open-api.affiliate.shopee.com.br/graphql`)
   autenticada via assinatura SHA256 (`SHOPEE_APP_ID` + `SHOPEE_APP_SECRET`).
+- Implementa as 3 operações GraphQL oficiais:
+  1. `productOfferV2` (consulta de produtos, preços e taxas de comissão).
+  2. `generateShortLink` (geração automática de links curtos oficiais `s.shopee.com.br`).
+  3. `conversionReport` (consulta automática de conversões e comissões).
 - Quando a conta de afiliado ainda não possui liberação da Open API na Shopee, informa claramente
   `MISSING_CREDENTIALS` e disponibiliza o fluxo de importação manual de links (`s.shopee.com.br` ou
-  URLs parametrizadas geradas no painel oficial de afiliados da Shopee).
+  URLs parametrizadas com `SHOPEE_AFFILIATE_ID`).
 """
 
 import hashlib
@@ -30,18 +34,32 @@ class ShopeeBrasilConnector(BaseMarketplaceConnector):
     def check_availability(self) -> Dict[str, Any]:
         has_api = bool(settings.SHOPEE_APP_ID.strip() and settings.SHOPEE_APP_SECRET.strip())
         has_aff_id = bool(settings.SHOPEE_AFFILIATE_ID.strip())
-        status = "READY" if has_api else "MISSING_CREDENTIALS"
+
+        if has_api:
+            status = "READY"
+            mode = "OFFICIAL_API"
+            panel_state = "REALMENTE CONECTADO"
+        elif has_aff_id:
+            status = "MISSING_CREDENTIALS"
+            mode = "AFFILIATE_ID_ACTIVE_AWAITING_OPEN_API"
+            panel_state = "AGUARDANDO AUTORIZAÇÃO"
+        else:
+            status = "MISSING_CREDENTIALS"
+            mode = "MANUAL_IMPORT"
+            panel_state = "CREDENCIAIS AUSENTES"
+
         return {
             "marketplace": self.name,
             "slug": self.slug,
             "availability_status": status,
-            "integration_mode": "OFFICIAL_API" if has_api else "MANUAL_IMPORT",
+            "panel_state": panel_state,
+            "integration_mode": mode,
             "has_api_credentials": has_api,
             "has_affiliate_tag": has_aff_id,
             "official_requirements": (
                 "Requer aprovação no Programa de Afiliados da Shopee Brasil. "
-                "Para uso via API GraphQL oficial, configure SHOPEE_APP_ID e SHOPEE_APP_SECRET; "
-                "caso contrário, utilize a importação manual de links oficiais (s.shopee.com.br)."
+                "Para uso via API GraphQL oficial (productOfferV2, generateShortLink, conversionReport), "
+                "configure SHOPEE_APP_ID e SHOPEE_APP_SECRET; para links parametrizados configure SHOPEE_AFFILIATE_ID."
             ),
             "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
             "last_sync_status": self.last_sync_status,
@@ -111,6 +129,61 @@ class ShopeeBrasilConnector(BaseMarketplaceConnector):
             )
         return results
 
+    def generate_short_link_graphql(self, origin_url: str, sub_ids: Optional[List[str]] = None) -> str:
+        """Gera link curto oficial (s.shopee.com.br) via mutation generateShortLink da Open API."""
+        self.authenticate()
+        self.enforce_rate_limit()
+        gql_mutation = {
+            "query": (
+                "mutation($input: ShortLinkInput!) { "
+                "generateShortLink(input: $input) { shortLink } "
+                "}"
+            ),
+            "variables": {
+                "input": {
+                    "originUrl": origin_url.strip(),
+                    "subIds": (sub_ids or ["union_money_ai"])[:5],
+                }
+            },
+        }
+        body_str = json.dumps(gql_mutation, separators=(",", ":"))
+        headers = self._build_graphql_headers(body_str)
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(self.graphql_url, content=body_str, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+            short_link = data.get("data", {}).get("generateShortLink", {}).get("shortLink")
+            if short_link:
+                return str(short_link)
+        except Exception as exc:
+            raise IntegrationError(self.name, f"Erro ao gerar shortLink via GraphQL Shopee: {exc}") from exc
+        return self.build_affiliate_link(origin_url)
+
+    def fetch_conversion_report_graphql(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Consulta relatório de conversões e comissões via query conversionReport da Open API."""
+        self.authenticate()
+        self.enforce_rate_limit()
+        gql_query = {
+            "query": (
+                "query($limit: Int) { "
+                "conversionReport(limit: $limit) { "
+                "nodes { conversionId orderId orderStatus totalCommission netCommission purchaseTime } "
+                "} }"
+            ),
+            "variables": {"limit": min(limit, 100)},
+        }
+        body_str = json.dumps(gql_query, separators=(",", ":"))
+        headers = self._build_graphql_headers(body_str)
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(self.graphql_url, content=body_str, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+            return data.get("data", {}).get("conversionReport", {}).get("nodes", []) or []
+        except Exception as exc:
+            raise IntegrationError(self.name, f"Erro ao consultar conversionReport Shopee: {exc}") from exc
+
     def fetch_authorized_deals(self, limit: int = 10) -> List[Dict[str, Any]]:
         return self.search_products(query="oferta", limit=limit)
 
@@ -133,4 +206,3 @@ class ShopeeBrasilConnector(BaseMarketplaceConnector):
         if not items:
             raise IntegrationError(self.name, f"Item {external_id} não retornado pela API oficial.")
         return items[0]
-

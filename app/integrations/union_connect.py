@@ -38,8 +38,47 @@ from app.integrations.shopee import ShopeeBrasilConnector
 from app.integrations.social.instagram import InstagramConnector
 from app.integrations.social.pinterest import PinterestConnector
 from app.integrations.social.youtube import YouTubeConnector
-from app.models.audit import AuditLog
+from app.models.audit import AuditLog, SystemSetting
 from app.models.autonomous import IntegrationCredentialToken, IntegrationStatusIndicator
+
+RUNTIME_CREDENTIALS_SETTING_KEY = "union_connect_runtime_credentials"
+ALLOWED_RUNTIME_CREDENTIAL_KEYS = (
+    "ML_AFFILIATE_TAG",
+    "ML_APP_ID",
+    "ML_CLIENT_SECRET",
+    "ML_ACCESS_TOKEN",
+    "ML_REFRESH_TOKEN",
+    "AMAZON_PARTNER_TAG",
+    "AMAZON_ACCESS_KEY",
+    "AMAZON_SECRET_KEY",
+    "SHOPEE_AFFILIATE_ID",
+    "SHOPEE_APP_ID",
+    "SHOPEE_APP_SECRET",
+    "YOUTUBE_API_KEY",
+    "YOUTUBE_CLIENT_ID",
+    "YOUTUBE_CLIENT_SECRET",
+    "YOUTUBE_ACCESS_TOKEN",
+    "YOUTUBE_REFRESH_TOKEN",
+    "INSTAGRAM_APP_ID",
+    "INSTAGRAM_APP_SECRET",
+    "INSTAGRAM_BUSINESS_ACCOUNT_ID",
+    "INSTAGRAM_ACCESS_TOKEN",
+    "PINTEREST_APP_ID",
+    "PINTEREST_APP_SECRET",
+    "PINTEREST_BOARD_ID",
+    "PINTEREST_ACCESS_TOKEN",
+    "PINTEREST_REFRESH_TOKEN",
+    "GSC_SITE_URL",
+    "GSC_ACCESS_TOKEN",
+    "GSC_REFRESH_TOKEN",
+    "GA4_PROPERTY_ID",
+    "GA4_MEASUREMENT_ID",
+    "GA4_API_SECRET",
+    "GA4_ACCESS_TOKEN",
+    "REPORT_EMAIL_IMAP_HOST",
+    "REPORT_EMAIL_USER",
+    "REPORT_EMAIL_OAUTH_TOKEN",
+)
 
 
 OAUTH_METADATA: Dict[str, Dict[str, str]] = {
@@ -129,6 +168,7 @@ class UnionConnect:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.load_persisted_runtime_credentials()
         self.ml = MercadoLivreConnector()
         self.amazon = AmazonBrasilConnector()
         self.shopee = ShopeeBrasilConnector()
@@ -137,6 +177,82 @@ class UnionConnect:
         self.pinterest = PinterestConnector()
         self.gsc = GoogleSearchConsoleConnector()
         self.ga4 = GoogleAnalyticsConnector()
+
+    def load_persisted_runtime_credentials(self) -> Dict[str, str]:
+        """Carrega credenciais e tags salvas pelo proprietário no banco persistente (criptografadas) para settings."""
+        rec = (
+            self.db.query(SystemSetting)
+            .filter(SystemSetting.key == RUNTIME_CREDENTIALS_SETTING_KEY)
+            .first()
+        )
+        if not rec or not isinstance(rec.value_json, dict):
+            return {}
+        loaded: Dict[str, str] = {}
+        for k, enc_val in rec.value_json.items():
+            if k in ALLOWED_RUNTIME_CREDENTIAL_KEYS and enc_val:
+                dec = decrypt_token_value(str(enc_val))
+                if dec:
+                    setattr(settings, k, dec)
+                    loaded[k] = mask_secret(dec)
+        return loaded
+
+    def save_runtime_credentials(self, credentials_payload: Dict[str, Optional[str]]) -> Dict[str, Any]:
+        """Salva com criptografia simétrica as credenciais/tags informadas pelo proprietário no painel Cloud."""
+        rec = (
+            self.db.query(SystemSetting)
+            .filter(SystemSetting.key == RUNTIME_CREDENTIALS_SETTING_KEY)
+            .first()
+        )
+        stored_map: Dict[str, str] = dict(rec.value_json or {}) if rec and isinstance(rec.value_json, dict) else {}
+        updated_keys: List[str] = []
+
+        for key, raw_val in credentials_payload.items():
+            k = key.upper().strip()
+            if k not in ALLOWED_RUNTIME_CREDENTIAL_KEYS or raw_val is None:
+                continue
+            val = str(raw_val).strip()
+            if not val:
+                continue
+            stored_map[k] = encrypt_token_value(val) or ""
+            setattr(settings, k, val)
+            updated_keys.append(k)
+
+        if not rec:
+            rec = SystemSetting(
+                key=RUNTIME_CREDENTIALS_SETTING_KEY,
+                value_json=stored_map,
+                description="Credenciais e Affiliate Tags configuradas pelo proprietário no painel Cloud (criptografadas).",
+            )
+            self.db.add(rec)
+        else:
+            rec.value_json = stored_map
+
+        self.db.add(
+            AuditLog(
+                actor="owner_cloud_panel",
+                action="UNION_CONNECT_SAVE_RUNTIME_CREDENTIALS",
+                entity_type="SystemSetting",
+                entity_id=RUNTIME_CREDENTIALS_SETTING_KEY,
+                details={"updated_keys": updated_keys, "secrets_logged": False},
+            )
+        )
+        self.db.commit()
+
+        # Sincroniza tokens nas linhas IntegrationCredentialToken correspondentes
+        for slug in ("mercadolivre", "amazon", "shopee", "youtube", "instagram", "pinterest", "gsc", "ga4"):
+            env_info = self._get_env_credentials_for_slug(slug)
+            if env_info["has_creds"] and env_info["access_token"]:
+                self.store_authorized_token(
+                    connector_slug=slug,
+                    access_token=env_info["access_token"],
+                    refresh_token=env_info.get("refresh_token"),
+                )
+
+        return {
+            "status": "CREDENTIALS_SAVED_AND_ENCRYPTED",
+            "updated_keys": updated_keys,
+            "connectors": self.list_all_connectors(),
+        }
 
     def _get_env_credentials_for_slug(self, slug: str) -> Dict[str, Any]:
         """Inspeciona credenciais presentes no .env para sincronizar com o banco."""
@@ -582,6 +698,265 @@ class UnionConnect:
             .all()
         )
         return [self.get_connector_status(r.connector_slug) for r in rows]
+
+    def handle_oauth_callback(
+        self,
+        connector_slug: str,
+        code: str,
+        redirect_uri: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Processa o callback OAuth 2.0 oficial quando a plataforma redireciona com authorization code."""
+        slug = connector_slug.lower().strip()
+        cb_uri = redirect_uri or f"{settings.PUBLIC_BASE_URL}/api/connect/oauth/callback/{slug}"
+
+        if slug == "mercadolivre":
+            payload = self.ml.exchange_oauth_code(code=code, redirect_uri=cb_uri)
+            tok = str(payload.get("access_token") or "")
+            ref = payload.get("refresh_token")
+            ttl = int(payload.get("expires_in", 21600))
+            if tok:
+                self.save_runtime_credentials(
+                    {"ML_ACCESS_TOKEN": tok, "ML_REFRESH_TOKEN": str(ref) if ref else ""}
+                )
+                return self.store_authorized_token(
+                    connector_slug=slug,
+                    access_token=tok,
+                    refresh_token=str(ref) if ref else None,
+                    expires_in_seconds=ttl,
+                )
+
+        raise ValueError(
+            f"Callback OAuth para '{slug}' requer configuração prévia de Client ID / Client Secret da plataforma."
+        )
+
+    def get_phase5_platform_audit_panel(self) -> Dict[str, Any]:
+        """Auditoria detalhada da Fase 5 com os 4 estados oficiais: REALMENTE CONECTADO, AGUARDANDO AUTORIZAÇÃO, CREDENCIAIS AUSENTES, API NÃO DISPONÍVEL."""
+        connectors = {c["connector_slug"]: c for c in self.list_all_connectors()}
+
+        ml_has_token = (
+            connectors.get("mercadolivre", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+            or bool(settings.ML_ACCESS_TOKEN.strip())
+        )
+        ml_has_tag = bool(settings.ML_AFFILIATE_TAG.strip())
+        ml_has_oauth_client = bool(settings.ML_APP_ID.strip() and settings.ML_CLIENT_SECRET.strip())
+
+        amz_has_tag = bool(settings.AMAZON_PARTNER_TAG.strip())
+        amz_has_paapi = (
+            connectors.get("amazon", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+            or bool(amz_has_tag and settings.AMAZON_ACCESS_KEY.strip() and settings.AMAZON_SECRET_KEY.strip())
+        )
+
+        shp_has_tag = bool(settings.SHOPEE_AFFILIATE_ID.strip())
+        shp_has_api = (
+            connectors.get("shopee", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+            or bool(settings.SHOPEE_APP_ID.strip() and settings.SHOPEE_APP_SECRET.strip())
+        )
+
+        yt_active = connectors.get("youtube", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+        yt_has_client = bool(settings.YOUTUBE_CLIENT_ID.strip() or settings.YOUTUBE_API_KEY.strip())
+
+        ig_active = connectors.get("instagram", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+        ig_has_client = bool(settings.INSTAGRAM_APP_ID.strip() or settings.INSTAGRAM_BUSINESS_ACCOUNT_ID.strip())
+
+        pin_active = connectors.get("pinterest", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+        pin_has_client = bool(settings.PINTEREST_APP_ID.strip() or settings.PINTEREST_BOARD_ID.strip())
+
+        gsc_active = connectors.get("gsc", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+        ga4_active = connectors.get("ga4", {}).get("status_indicator") == IntegrationStatusIndicator.ACTIVE
+
+        marketplace_audits = [
+            {
+                "slug": "mercadolivre",
+                "name": "Mercado Livre Brasil",
+                "overall_state": (
+                    "REALMENTE CONECTADO"
+                    if ml_has_token
+                    else ("AGUARDANDO AUTORIZAÇÃO" if (ml_has_oauth_client or ml_has_tag) else "CREDENCIAIS AUSENTES")
+                ),
+                "official_api": "Mercado Livre Developers REST API (https://api.mercadolibre.com) + OAuth 2.0",
+                "approval_requirements": (
+                    "Conta ativa no Programa de Afiliados do Mercado Livre Brasil + Aplicação criada no DevCenter "
+                    "(https://developers.mercadolivre.com.br) com Redirect URI apontando para "
+                    f"{settings.PUBLIC_BASE_URL}/api/connect/oauth/callback/mercadolivre."
+                ),
+                "required_credentials": ["ML_AFFILIATE_TAG", "ML_APP_ID", "ML_CLIENT_SECRET", "ML_ACCESS_TOKEN", "ML_REFRESH_TOKEN"],
+                "oauth_authorization": {
+                    "applicable": True,
+                    "auth_url": self.get_oauth_authorization_url("mercadolivre")["authorization_url"],
+                    "state": "REALMENTE CONECTADO" if ml_has_token else ("AGUARDANDO AUTORIZAÇÃO" if ml_has_oauth_client else "CREDENCIAIS AUSENTES"),
+                },
+                "capabilities": {
+                    "auto_link_generation": {
+                        "state": "REALMENTE CONECTADO" if (ml_has_tag or ml_has_token) else "CREDENCIAIS AUSENTES",
+                        "description": "Geração determinística com parâmetro matt_tool=ML_AFFILIATE_TAG ou preservação de links curtos oficiais /sec/.",
+                    },
+                    "product_and_price_query": {
+                        "state": "REALMENTE CONECTADO" if ml_has_token else ("AGUARDANDO AUTORIZAÇÃO" if ml_has_oauth_client else "CREDENCIAIS AUSENTES"),
+                        "description": "Consulta oficial via GET /sites/MLB/search e GET /items/{id} com Bearer ML_ACCESS_TOKEN.",
+                    },
+                    "sales_and_commission_query": {
+                        "state": "REALMENTE CONECTADO" if ml_has_token else "CREDENCIAIS AUSENTES",
+                        "description": "Sincronização via API oficial / webhooks assinados / leitura IMAP OAuth de relatórios oficiais.",
+                    },
+                },
+                "limitations": (
+                    "Desde 2024/2025, a API do Mercado Livre exige Bearer Token OAuth 2.0 mesmo para buscas em /sites/MLB/search. "
+                    "O encurtador /sec/ da Stripe/Central de Afiliados não possui endpoint público sem sessão, mas links com matt_tool "
+                    "ou links /sec/ autorizados são 100% suportados."
+                ),
+            },
+            {
+                "slug": "amazon",
+                "name": "Amazon Brasil (Associados)",
+                "overall_state": (
+                    "REALMENTE CONECTADO"
+                    if amz_has_paapi
+                    else ("AGUARDANDO AUTORIZAÇÃO" if amz_has_tag else "CREDENCIAIS AUSENTES")
+                ),
+                "official_api": "Amazon Product Advertising API 5.0 (PA-API 5.0 — https://webservices.amazon.com.br/paapi5/searchitems) com assinatura AWS SigV4",
+                "approval_requirements": (
+                    "Cadastro no Associados Amazon Brasil (https://associados.amazon.com.br). "
+                    "Para liberar chaves da PA-API 5.0, a Amazon exige contratualmente 3 vendas qualificadas nos primeiros 180 dias."
+                ),
+                "required_credentials": ["AMAZON_PARTNER_TAG", "AMAZON_ACCESS_KEY", "AMAZON_SECRET_KEY"],
+                "oauth_authorization": {
+                    "applicable": False,
+                    "auth_url": "https://associados.amazon.com.br/assoc_credentials/home",
+                    "state": "REALMENTE CONECTADO" if amz_has_paapi else "CREDENCIAIS AUSENTES",
+                },
+                "capabilities": {
+                    "auto_link_generation": {
+                        "state": "REALMENTE CONECTADO" if amz_has_tag else "CREDENCIAIS AUSENTES",
+                        "description": "Geração automática de links oficiais https://www.amazon.com.br/dp/{ASIN}?tag={AMAZON_PARTNER_TAG}.",
+                    },
+                    "product_and_price_query": {
+                        "state": "REALMENTE CONECTADO" if amz_has_paapi else ("AGUARDANDO AUTORIZAÇÃO" if amz_has_tag else "CREDENCIAIS AUSENTES"),
+                        "description": "Consulta automatizada via PA-API 5.0 SearchItems e GetItems com assinatura AWS4-HMAC-SHA256.",
+                    },
+                    "sales_and_commission_query": {
+                        "state": "API NÃO DISPONÍVEL",
+                        "description": "A Amazon Brasil NÃO fornece API REST pública para relatórios de vendas/comissões do Associados (sincronização via leitor de e-mail IMAP OAuth ou CSV oficial).",
+                    },
+                },
+                "limitations": (
+                    "Limitação contratual e técnica oficial da Amazon: 1) PA-API 5.0 requer 3 vendas qualificadas prévias para liberação das chaves; "
+                    "2) Não existe API REST pública para extrair relatórios de comissões do Associados Amazon Brasil; "
+                    "3) Proibido exibir preços estáticos sem timestamp ou fazer scraping de páginas da Amazon."
+                ),
+            },
+            {
+                "slug": "shopee",
+                "name": "Shopee Brasil (Affiliate Open API)",
+                "overall_state": (
+                    "REALMENTE CONECTADO"
+                    if shp_has_api
+                    else ("AGUARDANDO AUTORIZAÇÃO" if shp_has_tag else "CREDENCIAIS AUSENTES")
+                ),
+                "official_api": "Shopee Affiliate Open Platform GraphQL API (https://open-api.affiliate.shopee.com.br/graphql) com assinatura SHA256",
+                "approval_requirements": (
+                    "Conta aprovada no Programa de Afiliados da Shopee Brasil (https://affiliate.shopee.com.br) e solicitação "
+                    "de acesso à Open API no painel para obtenção de App ID e App Secret."
+                ),
+                "required_credentials": ["SHOPEE_AFFILIATE_ID", "SHOPEE_APP_ID", "SHOPEE_APP_SECRET"],
+                "oauth_authorization": {
+                    "applicable": False,
+                    "auth_url": "https://affiliate.shopee.com.br/open_api",
+                    "state": "REALMENTE CONECTADO" if shp_has_api else "CREDENCIAIS AUSENTES",
+                },
+                "capabilities": {
+                    "auto_link_generation": {
+                        "state": "REALMENTE CONECTADO" if (shp_has_api or shp_has_tag) else "CREDENCIAIS AUSENTES",
+                        "description": "Mutation GraphQL generateShortLink (s.shopee.com.br) ou parametrização oficial af_siteid=SHOPEE_AFFILIATE_ID.",
+                    },
+                    "product_and_price_query": {
+                        "state": "REALMENTE CONECTADO" if shp_has_api else ("AGUARDANDO AUTORIZAÇÃO" if shp_has_tag else "CREDENCIAIS AUSENTES"),
+                        "description": "Query GraphQL productOfferV2 retornando preço, comissão anunciada, imagem e offerLink.",
+                    },
+                    "sales_and_commission_query": {
+                        "state": "REALMENTE CONECTADO" if shp_has_api else "CREDENCIAIS AUSENTES",
+                        "description": "Query GraphQL conversionReport para sincronização direta de pedidos, status e comissões líquidas.",
+                    },
+                },
+                "limitations": (
+                    "A Open API GraphQL da Shopee exige liberação específica de App ID / Secret na conta do afiliado e assinatura "
+                    "SHA256(AppId + Timestamp + Payload + Secret) em cada requisição, com janela máxima de timestamp."
+                ),
+            },
+        ]
+
+        channel_and_analytics_audits = [
+            {
+                "slug": "union_ofertas",
+                "name": "Portal Próprio UNION OFERTAS (https://afiliados.projetosunion.cloud/ofertas)",
+                "overall_state": "REALMENTE CONECTADO",
+                "official_api": "Motor Nativo FastAPI + Jinja2 + SQLite WAL + Sitemap XML + JSON-LD + Redirecionador /r/{short_code}",
+                "required_credentials": [],
+                "limitations": "Nenhuma limitação externa — 100% autônomo e operacional na nuvem 24/7.",
+            },
+            {
+                "slug": "youtube",
+                "name": "YouTube & YouTube Shorts (Data API v3)",
+                "overall_state": "REALMENTE CONECTADO" if yt_active else ("AGUARDANDO AUTORIZAÇÃO" if yt_has_client else "CREDENCIAIS AUSENTES"),
+                "official_api": "Google YouTube Data API v3 (POST https://www.googleapis.com/youtube/v3/videos?part=snippet,status)",
+                "required_credentials": ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_ACCESS_TOKEN", "YOUTUBE_REFRESH_TOKEN"],
+                "limitations": "Exige projeto no Google Cloud Console com YouTube Data API v3 ativada, tela de consentimento OAuth 2.0 aprovada e cota diária padrão de 10.000 unidades (1 upload consome ~1.600 unidades).",
+            },
+            {
+                "slug": "instagram",
+                "name": "Instagram Reels (Meta Graph API v19.0)",
+                "overall_state": "REALMENTE CONECTADO" if ig_active else ("AGUARDANDO AUTORIZAÇÃO" if ig_has_client else "CREDENCIAIS AUSENTES"),
+                "official_api": "Meta Instagram Graph API v19.0 (/{ig-user-id}/media e /{ig-user-id}/media_publish)",
+                "required_credentials": ["INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "INSTAGRAM_BUSINESS_ACCOUNT_ID", "INSTAGRAM_ACCESS_TOKEN"],
+                "limitations": "Exige conta Instagram Profissional (Business ou Creator) vinculada a uma Página do Facebook e permissão OAuth instagram_content_publish.",
+            },
+            {
+                "slug": "pinterest",
+                "name": "Pinterest (API v5)",
+                "overall_state": "REALMENTE CONECTADO" if pin_active else ("AGUARDANDO AUTORIZAÇÃO" if pin_has_client else "CREDENCIAIS AUSENTES"),
+                "official_api": "Pinterest REST API v5 (POST https://api.pinterest.com/v5/pins)",
+                "required_credentials": ["PINTEREST_APP_ID", "PINTEREST_APP_SECRET", "PINTEREST_BOARD_ID", "PINTEREST_ACCESS_TOKEN"],
+                "limitations": "Exige conta Pinterest Business e aprovação de acesso Standard/Trial na Pinterest Developer Platform com escopo pins:write.",
+            },
+            {
+                "slug": "gsc",
+                "name": "Google Search Console API",
+                "overall_state": "REALMENTE CONECTADO" if gsc_active else "CREDENCIAIS AUSENTES",
+                "official_api": "Search Console API v1 (searchAnalytics/query)",
+                "required_credentials": ["GSC_SITE_URL", "GSC_ACCESS_TOKEN", "GSC_REFRESH_TOKEN"],
+                "limitations": "Exige propriedade de domínio verificada (afiliados.projetosunion.cloud) no Google Search Console.",
+            },
+            {
+                "slug": "ga4",
+                "name": "Google Analytics 4 (Data API & Measurement Protocol)",
+                "overall_state": "REALMENTE CONECTADO" if ga4_active else "CREDENCIAIS AUSENTES",
+                "official_api": "GA4 Data API v1beta + Measurement Protocol",
+                "required_credentials": ["GA4_PROPERTY_ID", "GA4_MEASUREMENT_ID", "GA4_API_SECRET"],
+                "limitations": "Opcional; o UNION MONEY AI já possui rastreamento interno nativo 100% funcional de visitantes e cliques (/r/{short_code}) independente do GA4.",
+            },
+        ]
+
+        return {
+            "allowed_states": [
+                "REALMENTE CONECTADO",
+                "AGUARDANDO AUTORIZAÇÃO",
+                "CREDENCIAIS AUSENTES",
+                "API NÃO DISPONÍVEL",
+            ],
+            "marketplaces": marketplace_audits,
+            "channels_and_analytics": channel_and_analytics_audits,
+            "summary_counts": {
+                "realmente_conectado": sum(
+                    1 for x in (marketplace_audits + channel_and_analytics_audits) if x["overall_state"] == "REALMENTE CONECTADO"
+                ),
+                "aguardando_autorizacao": sum(
+                    1 for x in (marketplace_audits + channel_and_analytics_audits) if x["overall_state"] == "AGUARDANDO AUTORIZAÇÃO"
+                ),
+                "credenciais_ausentes": sum(
+                    1 for x in (marketplace_audits + channel_and_analytics_audits) if x["overall_state"] == "CREDENCIAIS AUSENTES"
+                ),
+                "api_nao_disponivel_subfunctions": 1,  # Amazon Associates REST Commission Reports API
+            },
+        }
 
     def get_autonomy_flags_status(self) -> Dict[str, Any]:
         """Avalia as 11 flags de autonomia da Seção 11 contra as integrações realmente ativas."""

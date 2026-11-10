@@ -1,35 +1,62 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Conectores de Marketplaces & Importação Manual Autorizada</h1>
+    <h1 class="page-title">UNION CONNECT — Painel Oficial de Integrações & Ativação Comercial (Fase 5)</h1>
 </div>
 
 <div class="section-card">
-    <div class="section-title">Status Real dos Conectores (Sem Simulação de Integração)</div>
+    <div class="section-title">
+        Status Oficial de Conectividade (REALMENTE CONECTADO / AGUARDANDO AUTORIZAÇÃO / CREDENCIAIS AUSENTES / API NÃO DISPONÍVEL)
+    </div>
     <table>
         <thead>
             <tr>
-                <th>Marketplace</th>
-                <th>Modo Operacional</th>
-                <th>Disponibilidade</th>
-                <th>Credenciais API</th>
-                <th>Tag Afiliado</th>
-                <th>Requisitos Oficiais</th>
+                <th>Plataforma</th>
+                <th>Estado Geral</th>
+                <th>Geração Automática de Links</th>
+                <th>Consulta Produtos/Preços</th>
+                <th>Consulta Vendas/Comissões</th>
+                <th>API Oficial & Limitações Técnicas/Contratuais</th>
             </tr>
         </thead>
         <tbody>
-            {% for st in connector_statuses %}
+            {% for mp in phase5_audit.marketplaces %}
             <tr>
-                <td><strong>{{ st.marketplace }}</strong></td>
-                <td>{{ st.integration_mode }}</td>
+                <td><strong>{{ mp.name }}</strong></td>
                 <td>
-                    <span class="badge {{ 'badge-priority' if st.availability_status == 'READY' else 'badge-warn' }}">
-                        {{ st.availability_status }}
+                    <span class="badge {{ 'badge-priority' if mp.overall_state == 'REALMENTE CONECTADO' else 'badge-warn' }}">
+                        {{ mp.overall_state }}
                     </span>
                 </td>
-                <td>{{ "Ativas" if st.has_api_credentials else "Não configuradas" }}</td>
-                <td>{{ "Configurada" if st.has_affiliate_tag else "Manual por Link" }}</td>
-                <td style="font-size: 0.8rem; color: var(--text-secondary);">{{ st.official_requirements }}</td>
+                <td>
+                    <span class="badge {{ 'badge-priority' if mp.capabilities.auto_link_generation.state == 'REALMENTE CONECTADO' else 'badge-warn' }}">
+                        {{ mp.capabilities.auto_link_generation.state }}
+                    </span>
+                    <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+                        {{ mp.capabilities.auto_link_generation.description }}
+                    </div>
+                </td>
+                <td>
+                    <span class="badge {{ 'badge-priority' if mp.capabilities.product_and_price_query.state == 'REALMENTE CONECTADO' else 'badge-warn' }}">
+                        {{ mp.capabilities.product_and_price_query.state }}
+                    </span>
+                    <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+                        {{ mp.capabilities.product_and_price_query.description }}
+                    </div>
+                </td>
+                <td>
+                    <span class="badge {{ 'badge-priority' if mp.capabilities.sales_and_commission_query.state == 'REALMENTE CONECTADO' else 'badge-warn' }}">
+                        {{ mp.capabilities.sales_and_commission_query.state }}
+                    </span>
+                    <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px;">
+                        {{ mp.capabilities.sales_and_commission_query.description }}
+                    </div>
+                </td>
+                <td style="font-size: 0.78rem; color: var(--text-secondary);">
+                    <strong>API:</strong> {{ mp.official_api }}<br>
+                    <strong>Requisitos:</strong> {{ mp.approval_requirements }}<br>
+                    <strong>Limitações:</strong> {{ mp.limitations }}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -37,7 +64,97 @@
 </div>
 
 <div class="section-card">
-    <div class="section-title">Importação Manual de Produto e Link de Afiliado Autorizado</div>
+    <div class="section-title">Canais de Distribuição, Portal Próprio & Analytics (Fase 5)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Canal / Serviço</th>
+                <th>Estado Oficial</th>
+                <th>API Oficial Implementada</th>
+                <th>Credenciais Necessárias</th>
+                <th>Requisitos e Limitações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ch in phase5_audit.channels_and_analytics %}
+            <tr>
+                <td><strong>{{ ch.name }}</strong></td>
+                <td>
+                    <span class="badge {{ 'badge-priority' if ch.overall_state == 'REALMENTE CONECTADO' else 'badge-warn' }}">
+                        {{ ch.overall_state }}
+                    </span>
+                </td>
+                <td style="font-size:0.8rem;">{{ ch.official_api }}</td>
+                <td style="font-size:0.78rem;">{{ ch.required_credentials | join(', ') if ch.required_credentials else 'Nenhuma (Nativo)' }}</td>
+                <td style="font-size:0.78rem; color:var(--text-secondary);">{{ ch.limitations }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Ativação Inicial Única de Credenciais e Tags de Afiliado (Criptografado na Nuvem)</div>
+    <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:12px;">
+        Informe as credenciais oficiais obtidas nos portais de afiliados. Os valores são salvos com criptografia simétrica no volume persistente Cloud e ativam imediatamente a descoberta, geração de links e publicação 24/7 sem necessidade de mexer em arquivos <code>.env</code> ou terminal.
+    </p>
+    <form onsubmit="submitRuntimeCredentials(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Mercado Livre — Tag Afiliado (matt_tool)</label>
+                <input type="text" name="ML_AFFILIATE_TAG" placeholder="Ex.: 12345678">
+            </div>
+            <div class="form-group">
+                <label>Mercado Livre — Access Token OAuth 2.0</label>
+                <input type="password" name="ML_ACCESS_TOKEN" placeholder="APP_USR-...">
+            </div>
+            <div class="form-group">
+                <label>Mercado Livre — Refresh Token OAuth 2.0</label>
+                <input type="password" name="ML_REFRESH_TOKEN" placeholder="TG-...">
+            </div>
+            <div class="form-group">
+                <label>Amazon Brasil — Partner Tag (Associados)</label>
+                <input type="text" name="AMAZON_PARTNER_TAG" placeholder="Ex.: sualoja-20">
+            </div>
+            <div class="form-group">
+                <label>Amazon PA-API 5.0 — Access Key</label>
+                <input type="password" name="AMAZON_ACCESS_KEY" placeholder="AKPA...">
+            </div>
+            <div class="form-group">
+                <label>Amazon PA-API 5.0 — Secret Key</label>
+                <input type="password" name="AMAZON_SECRET_KEY" placeholder="Chave secreta PA-API 5.0">
+            </div>
+            <div class="form-group">
+                <label>Shopee Brasil — Affiliate ID</label>
+                <input type="text" name="SHOPEE_AFFILIATE_ID" placeholder="Ex.: 1839201">
+            </div>
+            <div class="form-group">
+                <label>Shopee Open API — App ID</label>
+                <input type="text" name="SHOPEE_APP_ID" placeholder="App ID da Open API Shopee">
+            </div>
+            <div class="form-group">
+                <label>Shopee Open API — App Secret</label>
+                <input type="password" name="SHOPEE_APP_SECRET" placeholder="App Secret da Open API Shopee">
+            </div>
+            <div class="form-group">
+                <label>YouTube Data API v3 — OAuth Access Token</label>
+                <input type="password" name="YOUTUBE_ACCESS_TOKEN" placeholder="ya29...">
+            </div>
+            <div class="form-group">
+                <label>Instagram Graph API — Access Token</label>
+                <input type="password" name="INSTAGRAM_ACCESS_TOKEN" placeholder="EAAB...">
+            </div>
+            <div class="form-group">
+                <label>Pinterest API v5 — Access Token</label>
+                <input type="password" name="PINTEREST_ACCESS_TOKEN" placeholder="pina_...">
+            </div>
+        </div>
+        <button type="submit" class="btn">Salvar Credenciais Criptografadas & Ativar Ciclo Autônomo</button>
+    </form>
+</div>
+
+<div class="section-card">
+    <div class="section-title">Importação Autorizada de Produto Verificado (Opcional)</div>
     <form onsubmit="submitManualImport(event)">
         <div class="form-grid">
             <div class="form-group">
@@ -82,6 +199,26 @@
 </div>
 
 <script>
+async function submitRuntimeCredentials(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const credentials = {};
+    for (const [k, v] of fd.entries()) {
+        if (v && v.trim()) {
+            credentials[k] = v.trim();
+        }
+    }
+    try {
+        await postJson("/api/connect/credentials/configure", {
+            credentials: credentials,
+            trigger_immediate_cycle: true
+        });
+        window.location.reload();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
 async function submitManualImport(e) {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -106,4 +243,3 @@ async function submitManualImport(e) {
 }
 </script>
 {% endblock %}
-

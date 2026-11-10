@@ -1,14 +1,16 @@
-"""Rotas de Integrações de Marketplaces, Diagnóstico de APIs e Importação Manual Autorizada."""
+"""Rotas de Integrações de Marketplaces, Auditoria Fase 5, Ativação OAuth/Credenciais e Importação Autorizada."""
 
 from pathlib import Path
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Dict, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from app.automation.autonomous_orchestrator import UnionAutonomousOrchestrator
 from app.core.exceptions import IntegrationError
 from app.dependencies import get_db_session
+from app.integrations.union_connect import UnionConnect
 from app.intelligence.discovery import (
     discover_from_marketplace,
     get_all_connectors_status,
@@ -38,8 +40,15 @@ class ManualImportSchema(BaseModel):
     in_stock: bool = True
 
 
+class RuntimeCredentialsPayload(BaseModel):
+    credentials: Dict[str, Optional[str]]
+    trigger_immediate_cycle: bool = True
+
+
 @router.get("/integrations", response_class=HTMLResponse)
 def integrations_page(request: Request, db: Session = Depends(get_db_session)):
+    uc = UnionConnect(db)
+    phase5_audit = uc.get_phase5_platform_audit_panel()
     connector_statuses = get_all_connectors_status(db)
     marketplaces = db.query(Marketplace).order_by(Marketplace.id).all()
     categories = db.query(Category).filter(Category.is_active.is_(True)).order_by(Category.name).all()
@@ -47,7 +56,8 @@ def integrations_page(request: Request, db: Session = Depends(get_db_session)):
         request,
         "integrations.html",
         {
-            "page_title": "Integrações e Conectores",
+            "page_title": "Integrações, Auditoria Técnica e Ativação OAuth (Fase 5)",
+            "phase5_audit": phase5_audit,
             "connector_statuses": connector_statuses,
             "marketplaces": marketplaces,
             "categories": categories,
@@ -57,7 +67,46 @@ def integrations_page(request: Request, db: Session = Depends(get_db_session)):
 
 @router.get("/api/integrations/status")
 def api_integrations_status(db: Session = Depends(get_db_session)):
+    _ = UnionConnect(db)
     return get_all_connectors_status(db)
+
+
+@router.get("/api/integrations/phase5-audit")
+def api_integrations_phase5_audit(db: Session = Depends(get_db_session)):
+    """Retorna a auditoria detalhada das plataformas com os 4 estados oficiais da Fase 5."""
+    return UnionConnect(db).get_phase5_platform_audit_panel()
+
+
+@router.post("/api/connect/credentials/configure")
+def api_configure_runtime_credentials(
+    payload: RuntimeCredentialsPayload,
+    db: Session = Depends(get_db_session),
+):
+    """Salva com criptografia simétrica as credenciais/tags informadas pelo proprietário no painel Cloud."""
+    uc = UnionConnect(db)
+    saved = uc.save_runtime_credentials(payload.credentials)
+    cycle_res = None
+    if payload.trigger_immediate_cycle and saved.get("updated_keys"):
+        orch = UnionAutonomousOrchestrator(db)
+        cycle_res = orch.execute_cycle("every_6_hours")
+    return {
+        **saved,
+        "phase5_audit": uc.get_phase5_platform_audit_panel(),
+        "immediate_cycle": cycle_res,
+    }
+
+
+@router.get("/api/connect/oauth/callback/{connector_slug}")
+def api_oauth_callback(
+    connector_slug: str,
+    code: str = Query(..., min_length=2),
+    db: Session = Depends(get_db_session),
+):
+    """Recebe o redirecionamento OAuth 2.0 oficial da plataforma e armazena o token criptografado."""
+    try:
+        return UnionConnect(db).handle_oauth_callback(connector_slug=connector_slug, code=code)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/api/integrations/{marketplace_slug}/discover")
@@ -67,6 +116,7 @@ def api_discover_marketplace(
     limit: int = 10,
     db: Session = Depends(get_db_session),
 ):
+    _ = UnionConnect(db)
     return discover_from_marketplace(db=db, marketplace_slug=marketplace_slug, query=query, limit=limit)
 
 
@@ -76,8 +126,9 @@ def api_manual_import_product(
     payload: ManualImportSchema,
     db: Session = Depends(get_db_session),
 ):
-    """Fluxo oficial de importação manual de links e produtos autorizados quando API não está ativa."""
+    """Fluxo oficial de importação autorizada de links e produtos verificados."""
     try:
+        _ = UnionConnect(db)
         connector = get_connector(marketplace_slug)
         normalized = connector.normalize_manual_import(payload.model_dump())
     except IntegrationError as exc:
@@ -98,7 +149,7 @@ def api_manual_import_product(
     product = create_product(db, product_data)
     connector.record_sync_status(
         db,
-        status_message=f"Importação manual concluída: produto #{product.id} ({product.title[:40]})",
+        status_message=f"Importação concluída: produto #{product.id} ({product.title[:40]})",
     )
     return {
         "status": "MANUAL_IMPORT_SUCCESS",
@@ -109,4 +160,3 @@ def api_manual_import_product(
         "score_classification": product.score_classification,
         "confidence_score": product.confidence_score,
     }
-

@@ -37,3 +37,4 @@ jobs:
       - name: Verify Production Cloud Health & HTTPS Domain
         run: |
           curl -fsS --retry 5 --retry-delay 5 https://afiliados.projetosunion.cloud/health
+
